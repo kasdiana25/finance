@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+
+
+{% block title %}
+Подписки
+{% endblock %}
+
+
+
+{% block content %}
+
+
+<div class="dashboard-header">
+
+
+<div>
+
+<h1>
+🔄 Регулярные платежи
+</h1>
+
+
+<p>
+Подписки и автоматические списания
+</p>
+
+
+</div>
+
+
+</div>
+
+
+
+<div class="panel">
+
+
+<div class="panel-header">
+
+
+<h2>
+Активные платежи
+</h2>
+
+
+</div>
+
+
+
+
+<table>
+
+
+<thead>
+
+<tr>
+
+<th>
+Название
+</th>
+
+<th>
+Сумма
+</th>
+
+<th>
+Дата списания
+</th>
+
+
+</tr>
+
+</thead>
+
+
+
+<tbody>
+
+
+{% for item in recurring %}
+
+
+<tr>
+
+
+<td>
+{{ item.name }}
+</td>
+
+
+<td>
+{{ item.amount }} ₽
+</td>
+
+
+<td>
+{{ item.next_payment_date }}
+</td>
+
+
+</tr>
+
+
+{% endfor %}
+
+
+</tbody>
+
+
+</table>
+
+
+
+</div>
+
+
+
+{% endblock %}

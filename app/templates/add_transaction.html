@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+Добавить операцию
+{% endblock %}
+
+
+
+{% block content %}
+
+
+
+<div class="dashboard-header">
+
+    <div>
+
+        <h1>
+            ➕ Новая операция
+        </h1>
+
+        <p>
+            Добавьте доход или расход в финансовый учет
+        </p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="operation-wrapper">
+
+
+
+<div class="operation-card">
+
+
+
+<form method="post"
+      action="/transactions/add">
+
+
+
+
+
+<h2>
+Данные операции
+</h2>
+
+
+
+
+<div class="type-selector">
+
+
+<label class="type-box income-type">
+
+
+<input 
+type="radio"
+name="type"
+value="income"
+checked>
+
+
+<span>
+💰 Доход
+</span>
+
+
+</label>
+
+
+
+
+<label class="type-box expense-type">
+
+
+<input 
+type="radio"
+name="type"
+value="expense">
+
+
+<span>
+📉 Расход
+</span>
+
+
+</label>
+
+
+
+</div>
+
+
+
+
+
+
+
+<div class="form-row">
+
+
+<div class="form-field">
+
+
+<label>
+📂 Категория
+</label>
+
+
+<input 
+type="text"
+name="category"
+placeholder="Например: Зарплата, Еда"
+required>
+
+
+</div>
+
+
+
+<div class="form-field">
+
+
+<label>
+💵 Сумма
+</label>
+
+
+<input 
+type="number"
+name="amount"
+placeholder="0 ₽"
+required>
+
+
+</div>
+
+
+
+</div>
+
+
+
+
+
+
+
+
+<div class="form-field">
+
+
+<label>
+📅 Дата операции
+</label>
+
+
+<input 
+type="date"
+name="date"
+required>
+
+
+</div>
+
+
+
+
+
+
+<div class="form-field">
+
+
+<label>
+📝 Описание
+</label>
+
+
+<textarea
+name="description"
+placeholder="Введите комментарий к операции"></textarea>
+
+
+</div>
+
+
+
+
+
+
+
+<button class="save-button">
+
+
+💾 Сохранить операцию
+
+
+</button>
+
+
+
+
+
+</form>
+
+
+</div>
+
+
+
+
+
+
+<div class="operation-info">
+
+
+<h3>
+💡 Совет
+</h3>
+
+
+<p>
+Регулярно добавляйте операции, чтобы прогнозы и статистика были точнее.
+</p>
+
+
+
+<div class="mini-card">
+
+<span>
+💰
+</span>
+
+Доходы увеличивают баланс
+
+
+</div>
+
+
+
+<div class="mini-card">
+
+<span>
+📉
+</span>
+
+Расходы уменьшают баланс
+
+
+</div>
+
+</div>
+
+</div>
+
+
+{% endblock %}

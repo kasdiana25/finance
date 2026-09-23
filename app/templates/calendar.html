@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+Финансовый календарь
+{% endblock %}
+
+
+
+{% block content %}
+
+
+
+<div class="dashboard-header">
+
+
+<div>
+
+<h1>
+📅 Финансовый календарь
+</h1>
+
+<p>
+Предстоящие списания и платежи
+</p>
+
+</div>
+
+
+
+<div class="date">
+
+{{ month }}
+
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="calendar">
+
+
+<div class="calendar-head">
+
+
+<div>Пн</div>
+<div>Вт</div>
+<div>Ср</div>
+<div>Чт</div>
+<div>Пт</div>
+<div>Сб</div>
+<div>Вс</div>
+
+
+</div>
+
+
+
+
+
+<div class="calendar-body">
+
+
+
+{% for day in days %}
+
+
+
+<div class="calendar-day">
+
+
+<div class="day-number">
+
+{{ day.number }}
+
+</div>
+
+
+
+
+{% for payment in day.payments %}
+
+
+<div class="payment">
+
+
+<div class="payment-name">
+
+{{ payment.name }}
+
+</div>
+
+
+<div class="payment-money">
+
+{{ payment.amount }} ₽
+
+</div>
+
+
+</div>
+
+
+{% endfor %}
+
+
+
+</div>
+
+
+
+{% endfor %}
+
+
+
+
+</div>
+
+
+</div>
+
+
+
+{% endblock %}

@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}
+Главная
+{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-header">
+
+    <div>
+        <h1>Finance</h1>
+        <p>
+            Автоматизированный учет доходов и расходов
+        </p>
+    </div>
+
+    <div class="date">
+        📊 Панель управления
+    </div>
+
+</div>
+
+
+
+<div class="dashboard-cards">
+
+
+    <div class="finance-card income">
+
+        <div class="icon">
+            💰
+        </div>
+
+        <div>
+            <h3>
+                Доходы
+            </h3>
+
+            <p>
+                {{ statistics.income }} ₽
+            </p>
+        </div>
+
+    </div>
+
+
+
+    <div class="finance-card expense">
+
+        <div class="icon">
+            📉
+        </div>
+
+        <div>
+            <h3>
+                Расходы
+            </h3>
+
+            <p>
+                {{ statistics.expense }} ₽
+            </p>
+        </div>
+
+    </div>
+
+
+
+    <div class="finance-card balance">
+
+        <div class="icon">
+            💳
+        </div>
+
+        <div>
+            <h3>
+                Баланс
+            </h3>
+
+            <p>
+                {{ statistics.balance }} ₽
+            </p>
+
+        </div>
+
+    </div>
+
+
+</div>
+
+
+
+<div class="panel">
+
+
+<div class="panel-header">
+
+<h2>
+Последние операции
+</h2>
+
+
+<a href="/transactions-page">
+Посмотреть все →
+</a>
+
+
+</div>
+
+
+
+<table>
+
+
+<thead>
+
+<tr>
+
+<th>
+Дата
+</th>
+
+<th>
+Тип
+</th>
+
+<th>
+Категория
+</th>
+
+<th>
+Сумма
+</th>
+
+<th>
+Описание
+</th>
+
+</tr>
+
+</thead>
+
+
+
+<tbody>
+
+
+{% for transaction in transactions %}
+
+<tr>
+
+
+<td>
+{{ transaction.date }}
+</td>
+
+
+
+<td>
+
+{% if transaction.type == "income" %}
+
+<span class="badge income-badge">
+Доход
+</span>
+
+{% else %}
+
+<span class="badge expense-badge">
+Расход
+</span>
+
+{% endif %}
+
+
+</td>
+
+
+
+<td>
+{{ transaction.category }}
+</td>
+
+
+
+<td>
+{{ transaction.amount }} ₽
+</td>
+
+
+
+<td>
+{{ transaction.description or "-" }}
+</td>
+
+
+</tr>
+
+
+{% endfor %}
+
+
+</tbody>
+
+
+</table>
+
+
+</div>
+
+
+{% endblock %}

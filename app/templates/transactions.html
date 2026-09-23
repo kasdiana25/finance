@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}
+Операции
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="dashboard-header">
+
+    <div>
+        <h1>Операции</h1>
+        <p>
+            История всех доходов и расходов
+        </p>
+    </div>
+
+
+    <a class="main-button" href="/transactions/add">
+        + Добавить операцию
+    </a>
+
+</div>
+
+
+
+<div class="panel">
+
+
+<div class="panel-header">
+
+<h2>
+Все операции
+</h2>
+
+
+</div>
+
+
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+Дата
+</th>
+
+<th>
+Тип
+</th>
+
+<th>
+Категория
+</th>
+
+<th>
+Сумма
+</th>
+
+<th>
+Описание
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+
+{% for transaction in transactions %}
+
+<tr>
+
+
+<td>
+{{ transaction.date }}
+</td>
+
+
+
+<td>
+
+{% if transaction.type == "income" %}
+
+<span class="badge income-badge">
+Доход
+</span>
+
+{% else %}
+
+<span class="badge expense-badge">
+Расход
+</span>
+
+{% endif %}
+
+
+</td>
+
+
+
+<td>
+{{ transaction.category }}
+</td>
+
+
+
+<td>
+{{ transaction.amount }} ₽
+</td>
+
+
+
+<td>
+{{ transaction.description or "-" }}
+</td>
+
+
+</tr>
+
+
+{% endfor %}
+
+
+</tbody>
+
+</table>
+
+
+</div>
+
+
+{% endblock %}

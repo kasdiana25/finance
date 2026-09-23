@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+
+
+{% block title %}
+Финансовый прогноз
+{% endblock %}
+
+
+
+{% block content %}
+
+
+
+<div class="dashboard-header">
+
+<div>
+
+<h1>
+📊 Прогноз
+</h1>
+
+<p>
+Анализ будущих расходов
+</p>
+
+</div>
+
+
+</div>
+
+
+
+
+<div class="dashboard-cards">
+
+
+<div class="finance-card balance">
+
+
+<div class="icon">
+📈
+</div>
+
+
+<div>
+
+<h3>
+Ожидаемый баланс
+</h3>
+
+
+<p>
+{{ forecast.balance }} ₽
+</p>
+
+
+</div>
+
+
+</div>
+
+
+
+
+<div class="finance-card expense">
+
+
+<div class="icon">
+📉
+</div>
+
+
+<div>
+
+<h3>
+Прогноз расходов
+</h3>
+
+
+<p>
+{{ forecast.expense }} ₽
+</p>
+
+
+</div>
+
+
+</div>
+
+
+
+</div>
+
+
+
+<div class="panel">
+
+
+<h2>
+Детализация
+</h2>
+
+
+<table>
+
+
+<tr>
+
+<th>
+Месяц
+</th>
+
+
+<th>
+Расходы
+</th>
+
+
+</tr>
+
+
+
+{% for item in forecast.months %}
+
+
+<tr>
+
+<td>
+{{ item.month }}
+</td>
+
+
+<td>
+{{ item.amount }} ₽
+</td>
+
+
+</tr>
+
+
+{% endfor %}
+
+
+</table>
+
+
+</div>
+
+
+
+{% endblock %}

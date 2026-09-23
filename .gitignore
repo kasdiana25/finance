@@ -1,0 +1,28 @@
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Переменные окружения
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Чеки
+app/telegram_bot/receipts/
+
+# IDE
+.idea/
+.vscode/
+
+# Windows
+Thumbs.db
