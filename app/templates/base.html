@@ -7,7 +7,7 @@
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     >
 
     <title>
@@ -31,10 +31,17 @@
 
 
     <!-- =====================================================
+         MOBILE OVERLAY
+    ====================================================== -->
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+
+    <!-- =====================================================
          SIDEBAR
     ====================================================== -->
 
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
 
 
         <!-- LOGO -->
@@ -53,7 +60,6 @@
         </div>
 
 
-
         <!-- =================================================
              NAVIGATION
         ================================================== -->
@@ -61,7 +67,7 @@
         <nav class="sidebar-nav">
 
 
-            <!-- ================= ФИНАНСЫ ================= -->
+            <!-- ФИНАНСЫ -->
 
             <div class="nav-section-title">
                 ФИНАНСЫ
@@ -72,13 +78,11 @@
                 href="/home"
                 class="nav-item {% if request.url.path == '/home' %}active{% endif %}"
             >
-
                 <span class="nav-icon">🏠</span>
 
                 <span class="nav-text">
                     Главная
                 </span>
-
             </a>
 
 
@@ -86,13 +90,11 @@
                 href="/transactions-page"
                 class="nav-item {% if request.url.path == '/transactions-page' %}active{% endif %}"
             >
-
                 <span class="nav-icon">💳</span>
 
                 <span class="nav-text">
                     Операции
                 </span>
-
             </a>
 
 
@@ -100,13 +102,11 @@
                 href="/calendar"
                 class="nav-item {% if request.url.path == '/calendar' %}active{% endif %}"
             >
-
                 <span class="nav-icon">📅</span>
 
                 <span class="nav-text">
                     Календарь
                 </span>
-
             </a>
 
 
@@ -114,18 +114,15 @@
                 href="/recurring-page"
                 class="nav-item {% if request.url.path == '/recurring-page' %}active{% endif %}"
             >
-
                 <span class="nav-icon">🔄</span>
 
                 <span class="nav-text">
                     Подписки
                 </span>
-
             </a>
 
 
-
-            <!-- ================= УПРАВЛЕНИЕ ================= -->
+            <!-- УПРАВЛЕНИЕ -->
 
             <div class="nav-section-title">
                 УПРАВЛЕНИЕ
@@ -136,13 +133,11 @@
                 href="/purchase-requests"
                 class="nav-item {% if request.url.path == '/purchase-requests' %}active{% endif %}"
             >
-
                 <span class="nav-icon">📦</span>
 
                 <span class="nav-text">
                     Заявки
                 </span>
-
             </a>
 
 
@@ -150,13 +145,11 @@
                 href="/products"
                 class="nav-item {% if request.url.path == '/products' %}active{% endif %}"
             >
-
                 <span class="nav-icon">🛒</span>
 
                 <span class="nav-text">
                     Товары
                 </span>
-
             </a>
 
 
@@ -164,18 +157,15 @@
                 href="/inventory"
                 class="nav-item {% if request.url.path == '/inventory' %}active{% endif %}"
             >
-
                 <span class="nav-icon">🏷️</span>
 
                 <span class="nav-text">
                     Инвентаризация
                 </span>
-
             </a>
 
 
-
-            <!-- ================= СОТРУДНИКИ ================= -->
+            <!-- СОТРУДНИКИ -->
 
             <div class="nav-section-title">
                 СОТРУДНИКИ
@@ -186,13 +176,11 @@
                 href="/money-transfers"
                 class="nav-item {% if request.url.path == '/money-transfers' %}active{% endif %}"
             >
-
                 <span class="nav-icon">💰</span>
 
                 <span class="nav-text">
                     Выданные деньги
                 </span>
-
             </a>
 
 
@@ -200,13 +188,11 @@
                 href="/receipts"
                 class="nav-item {% if request.url.path == '/receipts' %}active{% endif %}"
             >
-
                 <span class="nav-icon">🧾</span>
 
                 <span class="nav-text">
                     Чеки
                 </span>
-
             </a>
 
 
@@ -214,18 +200,15 @@
                 href="/employees"
                 class="nav-item {% if request.url.path == '/employees' %}active{% endif %}"
             >
-
                 <span class="nav-icon">👥</span>
 
                 <span class="nav-text">
                     Сотрудники
                 </span>
-
             </a>
 
 
-
-            <!-- ================= АНАЛИТИКА ================= -->
+            <!-- АНАЛИТИКА -->
 
             <div class="nav-section-title analytics-title">
                 АНАЛИТИКА
@@ -236,18 +219,15 @@
                 href="/reports"
                 class="nav-item analytics-item {% if request.url.path == '/reports' %}active{% endif %}"
             >
-
                 <span class="nav-icon">📈</span>
 
                 <span class="nav-text">
                     Отчёты
                 </span>
-
             </a>
 
 
         </nav>
-
 
 
         <!-- =================================================
@@ -261,6 +241,7 @@
             </div>
 
             <div>
+
                 <div class="sidebar-footer-title">
                     Finance
                 </div>
@@ -268,13 +249,13 @@
                 <div class="sidebar-footer-version">
                     Система учета · v1.0
                 </div>
+
             </div>
 
         </div>
 
 
     </aside>
-
 
 
     <!-- =====================================================
@@ -287,6 +268,18 @@
         <!-- TOPBAR -->
 
         <header class="topbar">
+
+
+            <!-- MOBILE MENU BUTTON -->
+
+            <button
+                class="mobile-menu-button"
+                id="mobileMenuButton"
+                type="button"
+                aria-label="Открыть меню"
+            >
+                ☰
+            </button>
 
 
             <div class="topbar-info">
@@ -326,7 +319,6 @@
         </header>
 
 
-
         <!-- CONTENT -->
 
         <section class="page">
@@ -342,6 +334,89 @@
 
 
 </div>
+
+
+<!-- =====================================================
+     MOBILE SIDEBAR SCRIPT
+====================================================== -->
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    const menuButton = document.getElementById("mobileMenuButton");
+
+    if (!sidebar || !overlay || !menuButton) {
+        return;
+    }
+
+
+    function openSidebar() {
+
+        sidebar.classList.add("mobile-open");
+        overlay.classList.add("active");
+
+        document.body.classList.add("sidebar-open");
+    }
+
+
+    function closeSidebar() {
+
+        sidebar.classList.remove("mobile-open");
+        overlay.classList.remove("active");
+
+        document.body.classList.remove("sidebar-open");
+    }
+
+
+    menuButton.addEventListener("click", function () {
+
+        if (sidebar.classList.contains("mobile-open")) {
+            closeSidebar();
+        } else {
+            openSidebar();
+        }
+
+    });
+
+
+    overlay.addEventListener("click", function () {
+        closeSidebar();
+    });
+
+
+    // Закрываем меню после выбора пункта
+
+    const navItems = sidebar.querySelectorAll(".nav-item");
+
+    navItems.forEach(function (item) {
+
+        item.addEventListener("click", function () {
+
+            if (window.innerWidth <= 700) {
+                closeSidebar();
+            }
+
+        });
+
+    });
+
+
+    // Если повернули телефон / изменили размер
+
+    window.addEventListener("resize", function () {
+
+        if (window.innerWidth > 700) {
+            closeSidebar();
+        }
+
+    });
+
+});
+
+</script>
 
 
 </body>

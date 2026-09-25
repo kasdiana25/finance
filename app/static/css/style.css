@@ -4356,3 +4356,636 @@ body.modal-open {
         border-radius: 13px;
     }
 }
+
+/* =========================================================
+   MOBILE SLIDING SIDEBAR
+   ========================================================= */
+
+
+/* Кнопка меню по умолчанию скрыта */
+
+.mobile-menu-button {
+    display: none;
+
+    width: 42px;
+    height: 42px;
+
+    border: none;
+    border-radius: 10px;
+
+    background: #f3f4f6;
+
+    font-size: 24px;
+    line-height: 1;
+
+    cursor: pointer;
+
+    align-items: center;
+    justify-content: center;
+
+    flex-shrink: 0;
+}
+
+
+/* Затемнение */
+
+.sidebar-overlay {
+    display: none;
+}
+
+
+/* =========================================================
+   PHONE
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+    html,
+    body {
+        width: 100%;
+        max-width: 100%;
+
+        margin: 0;
+        padding: 0;
+
+        overflow-x: hidden;
+    }
+
+
+    body.sidebar-open {
+        overflow: hidden;
+    }
+
+
+    /* -----------------------------------------------------
+       APP
+    ----------------------------------------------------- */
+
+    .app {
+        width: 100%;
+        min-height: 100vh;
+    }
+
+
+    /* -----------------------------------------------------
+       SIDEBAR
+    ----------------------------------------------------- */
+
+    .sidebar {
+
+        position: fixed;
+
+        top: 0;
+        left: 0;
+
+        width: 280px;
+        max-width: 85vw;
+
+        height: 100vh;
+
+        z-index: 1000;
+
+        transform: translateX(-100%);
+
+        transition: transform 0.25s ease;
+
+        overflow-y: auto;
+        overflow-x: hidden;
+
+        box-shadow: 8px 0 30px rgba(0, 0, 0, 0.18);
+    }
+
+
+    /* Открытое меню */
+
+    .sidebar.mobile-open {
+
+        transform: translateX(0);
+    }
+
+
+    /* -----------------------------------------------------
+       OVERLAY
+    ----------------------------------------------------- */
+
+    .sidebar-overlay {
+
+        position: fixed;
+
+        inset: 0;
+
+        z-index: 999;
+
+        display: block;
+
+        background: rgba(0, 0, 0, 0.45);
+
+        opacity: 0;
+        visibility: hidden;
+
+        transition:
+            opacity 0.25s ease,
+            visibility 0.25s ease;
+    }
+
+
+    .sidebar-overlay.active {
+
+        opacity: 1;
+        visibility: visible;
+    }
+
+
+    /* -----------------------------------------------------
+       MAIN
+    ----------------------------------------------------- */
+
+    .main {
+
+        width: 100%;
+
+        margin-left: 0 !important;
+
+        min-width: 0;
+    }
+
+
+    /* -----------------------------------------------------
+       TOPBAR
+    ----------------------------------------------------- */
+
+    .topbar {
+
+        width: 100%;
+
+        min-height: 64px;
+
+        padding: 10px 12px;
+
+        box-sizing: border-box;
+
+        display: flex;
+
+        align-items: center;
+
+        gap: 10px;
+    }
+
+
+    /* Кнопка ☰ */
+
+    .mobile-menu-button {
+
+        display: flex;
+    }
+
+
+    /* -----------------------------------------------------
+       TOPBAR INFO
+    ----------------------------------------------------- */
+
+    .topbar-info {
+
+        min-width: 0;
+        flex: 1;
+    }
+
+
+    .topbar-info h2 {
+
+        margin: 0;
+
+        font-size: 16px;
+
+        line-height: 1.2;
+
+        white-space: nowrap;
+
+        overflow: hidden;
+
+        text-overflow: ellipsis;
+    }
+
+
+    .topbar-info p {
+
+        margin: 3px 0 0;
+
+        font-size: 11px;
+
+        white-space: nowrap;
+
+        overflow: hidden;
+
+        text-overflow: ellipsis;
+    }
+
+
+    /* -----------------------------------------------------
+       PROFILE
+    ----------------------------------------------------- */
+
+    .profile {
+
+        flex-shrink: 0;
+    }
+
+
+    .profile-info {
+
+        display: none;
+    }
+
+
+    .profile-avatar {
+
+        width: 38px;
+        height: 38px;
+
+        display: flex;
+
+        align-items: center;
+        justify-content: center;
+
+        font-size: 18px;
+    }
+
+
+    /* -----------------------------------------------------
+       PAGE
+    ----------------------------------------------------- */
+
+    .page {
+
+        width: 100%;
+
+        max-width: 100%;
+
+        box-sizing: border-box;
+
+        padding: 12px;
+    }
+
+
+    /* -----------------------------------------------------
+       LOGO
+    ----------------------------------------------------- */
+
+    .logo {
+
+        padding: 18px 16px;
+    }
+
+
+    .logo-text {
+
+        display: block;
+    }
+
+
+    /* -----------------------------------------------------
+       NAVIGATION
+    ----------------------------------------------------- */
+
+    .sidebar-nav {
+
+        padding: 8px 12px;
+    }
+
+
+    .nav-section-title {
+
+        margin-top: 18px;
+        margin-bottom: 6px;
+
+        padding-left: 10px;
+
+        font-size: 11px;
+    }
+
+
+    .nav-item {
+
+        min-height: 46px;
+
+        padding: 10px 12px;
+
+        border-radius: 10px;
+    }
+
+
+    .nav-icon {
+
+        width: 30px;
+
+        min-width: 30px;
+
+        font-size: 19px;
+    }
+
+
+    .nav-text {
+
+        font-size: 14px;
+    }
+
+
+    /* -----------------------------------------------------
+       SIDEBAR FOOTER
+    ----------------------------------------------------- */
+
+    .sidebar-footer {
+
+        margin: 12px;
+
+        padding: 12px;
+    }
+
+
+    /* -----------------------------------------------------
+       GENERAL CARDS
+    ----------------------------------------------------- */
+
+    .card,
+    .panel,
+    .operation-card,
+    .operation-form-card {
+
+        max-width: 100%;
+
+        box-sizing: border-box;
+    }
+
+
+    /* -----------------------------------------------------
+       BUTTONS
+    ----------------------------------------------------- */
+
+    button,
+    .button,
+    .btn {
+
+        max-width: 100%;
+    }
+
+
+    /* -----------------------------------------------------
+       INPUTS
+    ----------------------------------------------------- */
+
+    input,
+    select,
+    textarea {
+
+        max-width: 100%;
+
+        box-sizing: border-box;
+
+        font-size: 16px;
+    }
+
+
+    /* -----------------------------------------------------
+       TABLES
+    ----------------------------------------------------- */
+
+    .table-wrapper,
+    .table-container,
+    .transactions-table-wrapper,
+    .money-table-wrapper {
+
+        width: 100%;
+
+        max-width: 100%;
+
+        overflow-x: auto;
+
+        -webkit-overflow-scrolling: touch;
+    }
+
+
+    table {
+
+        min-width: 650px;
+    }
+
+
+    /* -----------------------------------------------------
+       DASHBOARD
+    ----------------------------------------------------- */
+
+    .dashboard-header {
+
+        flex-direction: column;
+
+        align-items: flex-start;
+
+        gap: 12px;
+    }
+
+
+    .dashboard-cards {
+
+        grid-template-columns: 1fr !important;
+    }
+
+
+    /* -----------------------------------------------------
+       PRODUCTS
+    ----------------------------------------------------- */
+
+    .products-layout {
+
+        grid-template-columns: 1fr !important;
+    }
+
+
+    .products-grid {
+
+        grid-template-columns: 1fr !important;
+    }
+
+
+    .product-stats {
+
+        grid-template-columns: 1fr !important;
+    }
+
+
+    /* -----------------------------------------------------
+       FORMS
+    ----------------------------------------------------- */
+
+    .form-row {
+
+        grid-template-columns: 1fr !important;
+
+        gap: 12px;
+    }
+
+
+    .form-field {
+
+        width: 100%;
+    }
+
+
+    /* -----------------------------------------------------
+       OPERATION TYPES
+    ----------------------------------------------------- */
+
+    .operation-type-selector,
+    .type-selector {
+
+        grid-template-columns: 1fr !important;
+    }
+
+
+    .operation-type,
+    .type-box {
+
+        width: 100%;
+
+        box-sizing: border-box;
+    }
+
+
+    /* -----------------------------------------------------
+       MONEY TRANSFERS
+    ----------------------------------------------------- */
+
+    .money-stats {
+
+        grid-template-columns: 1fr !important;
+    }
+
+
+    /* -----------------------------------------------------
+       CALENDAR
+    ----------------------------------------------------- */
+
+    .calendar-wrapper {
+
+        width: 100%;
+
+        overflow-x: auto;
+
+        -webkit-overflow-scrolling: touch;
+    }
+
+
+    .calendar {
+
+        min-width: 650px;
+    }
+
+
+    /* -----------------------------------------------------
+       MODALS
+    ----------------------------------------------------- */
+
+    .modal {
+
+        padding: 12px;
+
+        box-sizing: border-box;
+    }
+
+
+    .modal-content {
+
+        width: 100%;
+
+        max-width: 100%;
+
+        max-height: 90vh;
+
+        overflow-y: auto;
+
+        box-sizing: border-box;
+
+        border-radius: 14px;
+    }
+
+
+    /* -----------------------------------------------------
+       NOTIFICATIONS
+    ----------------------------------------------------- */
+
+    .notifications {
+
+        width: 100%;
+
+        max-width: 100%;
+    }
+
+
+    /* -----------------------------------------------------
+       EMPTY / ERROR
+    ----------------------------------------------------- */
+
+    .empty-state,
+    .error-state {
+
+        width: 100%;
+
+        box-sizing: border-box;
+
+        padding: 24px 16px;
+    }
+
+}
+
+
+/* =========================================================
+   VERY SMALL PHONES
+   ========================================================= */
+
+@media (max-width: 400px) {
+
+    .topbar {
+
+        padding: 8px 10px;
+    }
+
+
+    .mobile-menu-button {
+
+        width: 40px;
+        height: 40px;
+
+        font-size: 22px;
+    }
+
+
+    .profile-avatar {
+
+        width: 36px;
+        height: 36px;
+    }
+
+
+    .topbar-info h2 {
+
+        font-size: 15px;
+    }
+
+
+    .topbar-info p {
+
+        display: none;
+    }
+
+
+    .page {
+
+        padding: 10px;
+    }
+
+
+    .sidebar {
+
+        width: 270px;
+    }
+
+}
