@@ -341,7 +341,6 @@
 ====================================================== -->
 
 <script>
-
 document.addEventListener("DOMContentLoaded", function () {
 
     const sidebar = document.getElementById("sidebar");
@@ -349,6 +348,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const menuButton = document.getElementById("mobileMenuButton");
 
     if (!sidebar || !overlay || !menuButton) {
+        console.error("Sidebar elements not found");
         return;
     }
 
@@ -359,6 +359,9 @@ document.addEventListener("DOMContentLoaded", function () {
         overlay.classList.add("active");
 
         document.body.classList.add("sidebar-open");
+
+        menuButton.setAttribute("aria-label", "Закрыть меню");
+        menuButton.setAttribute("aria-expanded", "true");
     }
 
 
@@ -368,10 +371,16 @@ document.addEventListener("DOMContentLoaded", function () {
         overlay.classList.remove("active");
 
         document.body.classList.remove("sidebar-open");
+
+        menuButton.setAttribute("aria-label", "Открыть меню");
+        menuButton.setAttribute("aria-expanded", "false");
     }
 
 
-    menuButton.addEventListener("click", function () {
+    menuButton.addEventListener("click", function (event) {
+
+        event.preventDefault();
+        event.stopPropagation();
 
         if (sidebar.classList.contains("mobile-open")) {
             closeSidebar();
@@ -386,8 +395,6 @@ document.addEventListener("DOMContentLoaded", function () {
         closeSidebar();
     });
 
-
-    // Закрываем меню после выбора пункта
 
     const navItems = sidebar.querySelectorAll(".nav-item");
 
@@ -404,7 +411,14 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
 
-    // Если повернули телефон / изменили размер
+    document.addEventListener("keydown", function (event) {
+
+        if (event.key === "Escape") {
+            closeSidebar();
+        }
+
+    });
+
 
     window.addEventListener("resize", function () {
 
@@ -415,7 +429,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
 });
-
 </script>
 
 
