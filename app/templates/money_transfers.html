@@ -1,0 +1,732 @@
+{% extends "base.html" %}
+
+{% block title %}Выданные деньги{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-header">
+
+    <div>
+
+        <h1>Выданные деньги</h1>
+
+        <p>
+            Управление денежными средствами сотрудников
+        </p>
+
+    </div>
+
+
+    <button
+        type="button"
+        class="main-button"
+        onclick="openTransferModal()"
+    >
+        + Выдать деньги
+    </button>
+
+</div>
+
+
+<!-- =====================================================
+     СТАТИСТИКА
+===================================================== -->
+
+<div class="transfer-stats">
+
+    <div class="transfer-stat">
+
+        <span>
+            Всего выдач
+        </span>
+
+        <strong>
+            {{ transfers|length }}
+        </strong>
+
+    </div>
+
+
+    <div class="transfer-stat">
+
+        <span>
+            Выдано сейчас
+        </span>
+
+        <strong>
+
+            {{
+                transfers
+                |selectattr("status", "equalto", "issued")
+                |list
+                |length
+            }}
+
+        </strong>
+
+    </div>
+
+
+    <div class="transfer-stat">
+
+        <span>
+            Закрыто
+        </span>
+
+        <strong>
+
+            {{
+                transfers
+                |selectattr("status", "equalto", "closed")
+                |list
+                |length
+            }}
+
+        </strong>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     ТАБЛИЦА
+===================================================== -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <div>
+
+            <h2>
+                История выдачи
+            </h2>
+
+            <p class="panel-description">
+                Все денежные средства, выданные сотрудникам
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Сотрудник
+                    </th>
+
+                    <th>
+                        Сумма
+                    </th>
+
+                    <th>
+                        Назначение
+                    </th>
+
+                    <th>
+                        Комментарий
+                    </th>
+
+                    <th>
+                        Дата
+                    </th>
+
+                    <th>
+                        Статус
+                    </th>
+
+                    <th>
+                        Действие
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                {% for transfer in transfers %}
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            {{ transfer.employee_name }}
+                        </strong>
+                    </td>
+
+
+                    <td>
+
+                        <strong class="money-amount">
+                            {{ "%.2f"|format(transfer.amount) }} ₽
+                        </strong>
+
+                    </td>
+
+
+                    <td>
+                        {{ transfer.purpose }}
+                    </td>
+
+
+                    <td>
+                        {{ transfer.comment or "—" }}
+                    </td>
+
+
+                    <td>
+                        {{ transfer.created_at }}
+                    </td>
+
+
+                    <td>
+
+                        {% if transfer.status == "issued" %}
+
+                        <span class="badge transfer-issued">
+                            Выдано
+                        </span>
+
+                        {% elif transfer.status == "closed" %}
+
+                        <span class="badge transfer-closed">
+                            Закрыто
+                        </span>
+
+                        {% else %}
+
+                        <span class="badge">
+                            {{ transfer.status }}
+                        </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if transfer.status == "issued" %}
+
+                        <form
+                            method="post"
+                            action="/money-transfers/{{ transfer.id }}/close"
+                        >
+
+                            <button
+                                type="submit"
+                                class="action-button close"
+                            >
+                                Закрыть
+                            </button>
+
+                        </form>
+
+                        {% else %}
+
+                        <span class="closed-text">
+                            ✓ Завершено
+                        </span>
+
+                        {% endif %}
+
+                    </td>
+
+                </tr>
+
+                {% else %}
+
+                <tr>
+
+                    <td
+                        colspan="7"
+                        class="empty-table"
+                    >
+
+                        <div class="empty-table-content">
+
+                            <div class="empty-table-icon">
+                                💰
+                            </div>
+
+                            <h3>
+                                Денег пока не выдавали
+                            </h3>
+
+                            <p>
+                                Нажмите «Выдать деньги»,
+                                чтобы создать первую выдачу.
+                            </p>
+
+                            <button
+                                type="button"
+                                class="main-button"
+                                onclick="openTransferModal()"
+                            >
+                                + Выдать деньги
+                            </button>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     МОДАЛЬНОЕ ОКНО ВЫДАЧИ
+===================================================== -->
+
+<div
+    id="transferModal"
+    class="transfer-modal"
+>
+
+    <div
+        class="transfer-overlay"
+        onclick="closeTransferModal()"
+    ></div>
+
+
+    <div class="transfer-modal-content">
+
+        <div class="transfer-modal-header">
+
+            <div>
+
+                <span class="modal-label">
+                    ФИНАНСОВАЯ ОПЕРАЦИЯ
+                </span>
+
+                <h2>
+                    Выдать деньги
+                </h2>
+
+                <p>
+                    Создание новой выдачи сотруднику
+                </p>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="modal-close"
+                onclick="closeTransferModal()"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <form
+            method="post"
+            action="/money-transfers"
+            class="transfer-form"
+        >
+
+
+            <div class="form-field">
+
+                <label>
+                    Сотрудник
+                </label>
+
+                <select
+                    name="telegram_user_id"
+                    required
+                >
+
+                    <option value="">
+                        Выберите сотрудника
+                    </option>
+
+                    {% for employee in employees %}
+
+                    <option value="{{ employee.id }}">
+
+                        {{ employee.full_name }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="form-field">
+
+                <label>
+                    Сумма
+                </label>
+
+                <div class="amount-input">
+
+                    <input
+                        type="number"
+                        name="amount"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="0.00"
+                        required
+                    >
+
+                    <span>
+                        ₽
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <div class="form-field">
+
+                <label>
+                    Назначение
+                </label>
+
+                <input
+                    type="text"
+                    name="purpose"
+                    placeholder="Например: хозяйственные расходы"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-field">
+
+                <label>
+                    Комментарий
+                </label>
+
+                <textarea
+                    name="comment"
+                    rows="4"
+                    placeholder="Дополнительная информация"
+                ></textarea>
+
+            </div>
+
+
+            <div class="transfer-modal-actions">
+
+                <button
+                    type="button"
+                    class="cancel-button"
+                    onclick="closeTransferModal()"
+                >
+                    Отмена
+                </button>
+
+
+                <button
+                    type="submit"
+                    class="save-button"
+                >
+                    💰 Выдать деньги
+                </button>
+
+            </div>
+
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<script>
+
+function openTransferModal() {
+
+    const modal =
+        document.getElementById(
+            "transferModal"
+        );
+
+    modal.classList.add("active");
+
+    document.body.classList.add(
+        "modal-open"
+    );
+
+}
+
+
+function closeTransferModal() {
+
+    const modal =
+        document.getElementById(
+            "transferModal"
+        );
+
+    modal.classList.remove("active");
+
+    document.body.classList.remove(
+        "modal-open"
+    );
+
+}
+
+
+document.addEventListener(
+    "keydown",
+    function(event) {
+
+        if (event.key === "Escape") {
+            closeTransferModal();
+        }
+
+    }
+);
+
+</script>
+
+
+<style>
+
+.transfer-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.transfer-stat {
+    background: white;
+    border: 1px solid #eaecf0;
+    border-radius: 14px;
+    padding: 18px 20px;
+}
+
+.transfer-stat span {
+    display: block;
+    color: #667085;
+    font-size: 13px;
+    margin-bottom: 7px;
+}
+
+.transfer-stat strong {
+    font-size: 24px;
+    color: #101828;
+}
+
+.money-amount {
+    color: #4f46e5;
+}
+
+.transfer-issued {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.transfer-closed {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.action-button.close {
+    border: none;
+    background: #fee2e2;
+    color: #b91c1c;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.closed-text {
+    color: #15803d;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+
+/* MODAL */
+
+.transfer-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    z-index: 1000;
+}
+
+.transfer-modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.transfer-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.transfer-modal-content {
+    position: relative;
+    z-index: 2;
+    width: min(560px, calc(100% - 30px));
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}
+
+.transfer-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 24px;
+    border-bottom: 1px solid #eaecf0;
+}
+
+.transfer-modal-header h2 {
+    margin: 6px 0;
+}
+
+.transfer-modal-header p {
+    margin: 0;
+    color: #667085;
+    font-size: 13px;
+}
+
+.modal-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #4f46e5;
+    letter-spacing: 1px;
+}
+
+.modal-close {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 10px;
+    background: #f2f4f7;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.transfer-form {
+    padding: 24px;
+}
+
+.form-field {
+    margin-bottom: 18px;
+}
+
+.form-field label {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #344054;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #d0d5dd;
+    border-radius: 10px;
+    padding: 11px 13px;
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+    border-color: #4f46e5;
+}
+
+.amount-input {
+    position: relative;
+}
+
+.amount-input input {
+    padding-right: 40px;
+}
+
+.amount-input span {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #667085;
+    font-weight: 600;
+}
+
+.transfer-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+.cancel-button,
+.save-button {
+    border: none;
+    border-radius: 10px;
+    padding: 11px 18px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cancel-button {
+    background: #f2f4f7;
+    color: #344054;
+}
+
+.save-button {
+    background: #4f46e5;
+    color: white;
+}
+
+body.modal-open {
+    overflow: hidden;
+}
+
+@media (max-width: 800px) {
+
+    .transfer-stats {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+</style>
+
+{% endblock %}

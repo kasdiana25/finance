@@ -4,9 +4,7 @@
 Операции
 {% endblock %}
 
-
 {% block content %}
-
 
 <div class="dashboard-header">
 
@@ -17,124 +15,435 @@
         </p>
     </div>
 
-
-    <a class="main-button" href="/transactions/add">
+    <button
+        type="button"
+        class="main-button"
+        onclick="openTransactionModal()"
+    >
         + Добавить операцию
-    </a>
+    </button>
 
 </div>
-
 
 
 <div class="panel">
 
+    <div class="panel-header">
 
-<div class="panel-header">
+        <div>
+            <h2>Все операции</h2>
+            <p class="panel-description">
+                История финансовых операций
+            </p>
+        </div>
 
-<h2>
-Все операции
-</h2>
+    </div>
 
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+
+                <tr>
+                    <th>Дата</th>
+                    <th>Тип</th>
+                    <th>Категория</th>
+                    <th>Сумма</th>
+                    <th>Описание</th>
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                {% for transaction in transactions %}
+
+                <tr>
+
+                    <td>
+                        {{ transaction.date }}
+                    </td>
+
+
+                    <td>
+
+                        {% if transaction.type == "income" %}
+
+                        <span class="badge income-badge">
+                            Доход
+                        </span>
+
+                        {% else %}
+
+                        <span class="badge expense-badge">
+                            Расход
+                        </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+                        {{ transaction.category }}
+                    </td>
+
+
+                    <td class="transaction-amount">
+
+                        {% if transaction.type == "income" %}
+                            <span class="income-amount">
+                                +{{ transaction.amount }} ₽
+                            </span>
+                        {% else %}
+                            <span class="expense-amount">
+                                -{{ transaction.amount }} ₽
+                            </span>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+                        {{ transaction.description or "-" }}
+                    </td>
+
+                </tr>
+
+                {% else %}
+
+                <tr>
+
+                    <td colspan="5" class="empty-table">
+
+                        <div class="empty-table-content">
+
+                            <div class="empty-table-icon">
+                                💳
+                            </div>
+
+                            <h3>
+                                Операций пока нет
+                            </h3>
+
+                            <p>
+                                Добавьте первую доходную или расходную операцию
+                            </p>
+
+                            <button
+                                type="button"
+                                class="main-button"
+                                onclick="openTransactionModal()"
+                            >
+                                + Добавить операцию
+                            </button>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
 
 </div>
 
 
+<!-- =========================================================
+     МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ ОПЕРАЦИИ
+     ========================================================= -->
 
-<table>
+<div id="transactionModal" class="transaction-modal">
 
-<thead>
-
-<tr>
-
-<th>
-Дата
-</th>
-
-<th>
-Тип
-</th>
-
-<th>
-Категория
-</th>
-
-<th>
-Сумма
-</th>
-
-<th>
-Описание
-</th>
-
-</tr>
-
-</thead>
+    <div
+        class="transaction-modal-overlay"
+        onclick="closeTransactionModal()"
+    ></div>
 
 
-<tbody>
+    <div class="transaction-modal-content">
 
 
-{% for transaction in transactions %}
+        <!-- HEADER -->
 
-<tr>
+        <div class="transaction-modal-header">
 
+            <div>
 
-<td>
-{{ transaction.date }}
-</td>
+                <h2>
+                    + Новая операция
+                </h2>
 
+                <p>
+                    Добавьте доход или расход
+                </p>
 
-
-<td>
-
-{% if transaction.type == "income" %}
-
-<span class="badge income-badge">
-Доход
-</span>
-
-{% else %}
-
-<span class="badge expense-badge">
-Расход
-</span>
-
-{% endif %}
+            </div>
 
 
-</td>
+            <button
+                type="button"
+                class="transaction-modal-close"
+                onclick="closeTransactionModal()"
+            >
+                ×
+            </button>
+
+        </div>
 
 
+        <!-- FORM -->
 
-<td>
-{{ transaction.category }}
-</td>
-
-
-
-<td>
-{{ transaction.amount }} ₽
-</td>
+        <form
+            method="post"
+            action="/transactions/add"
+        >
 
 
+            <!-- ТИП ОПЕРАЦИИ -->
 
-<td>
-{{ transaction.description or "-" }}
-</td>
-
-
-</tr>
+            <div class="transaction-type-selector">
 
 
-{% endfor %}
+                <label class="transaction-type income">
+
+                    <input
+                        type="radio"
+                        name="type"
+                        value="income"
+                        checked
+                    >
+
+                    <div>
+
+                        <strong>
+                            💰 Доход
+                        </strong>
+
+                        <span>
+                            Поступление денег
+                        </span>
+
+                    </div>
+
+                </label>
 
 
-</tbody>
+                <label class="transaction-type expense">
 
-</table>
+                    <input
+                        type="radio"
+                        name="type"
+                        value="expense"
+                    >
 
+                    <div>
+
+                        <strong>
+                            📉 Расход
+                        </strong>
+
+                        <span>
+                            Списание денег
+                        </span>
+
+                    </div>
+
+                </label>
+
+
+            </div>
+
+
+            <!-- КАТЕГОРИЯ + СУММА -->
+
+            <div class="transaction-form-grid">
+
+
+                <div class="form-field">
+
+                    <label>
+                        📂 Категория
+                    </label>
+
+                    <input
+                        type="text"
+                        name="category"
+                        placeholder="Например: Зарплата, Еда"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="form-field">
+
+                    <label>
+                        💵 Сумма
+                    </label>
+
+                    <input
+                        type="number"
+                        name="amount"
+                        placeholder="0"
+                        step="0.01"
+                        min="0"
+                        required
+                    >
+
+                </div>
+
+
+            </div>
+
+
+            <!-- ДАТА -->
+
+            <div class="form-field">
+
+                <label>
+                    📅 Дата операции
+                </label>
+
+                <input
+                    type="date"
+                    name="date"
+                    required
+                >
+
+            </div>
+
+
+            <!-- ОПИСАНИЕ -->
+
+            <div class="form-field">
+
+                <label>
+                    📝 Описание
+                </label>
+
+                <textarea
+                    name="description"
+                    placeholder="Введите комментарий к операции"
+                    rows="4"
+                ></textarea>
+
+            </div>
+
+
+            <!-- КНОПКИ -->
+
+            <div class="transaction-modal-actions">
+
+                <button
+                    type="button"
+                    class="transaction-cancel-button"
+                    onclick="closeTransactionModal()"
+                >
+                    Отмена
+                </button>
+
+
+                <button
+                    type="submit"
+                    class="transaction-save-button"
+                >
+                    💾 Сохранить
+                </button>
+
+            </div>
+
+
+        </form>
+
+    </div>
 
 </div>
+
+
+<!-- =========================================================
+     JAVASCRIPT
+     ========================================================= -->
+
+<script>
+
+function openTransactionModal() {
+
+    const modal = document.getElementById("transactionModal");
+
+    if (!modal) {
+        return;
+    }
+
+    modal.classList.add("active");
+
+    document.body.classList.add("modal-open");
+
+
+    /*
+     * Автоматически устанавливаем сегодняшнюю дату
+     */
+
+    const dateInput = modal.querySelector(
+        'input[name="date"]'
+    );
+
+
+    if (dateInput && !dateInput.value) {
+
+        const today = new Date()
+            .toISOString()
+            .split("T")[0];
+
+        dateInput.value = today;
+
+    }
+
+}
+
+
+function closeTransactionModal() {
+
+    const modal = document.getElementById("transactionModal");
+
+    if (!modal) {
+        return;
+    }
+
+    modal.classList.remove("active");
+
+    document.body.classList.remove("modal-open");
+
+}
+
+
+/*
+ * Закрытие по клавише ESC
+ */
+
+document.addEventListener(
+    "keydown",
+    function(event) {
+
+        if (event.key === "Escape") {
+
+            closeTransactionModal();
+
+        }
+
+    }
+);
+
+</script>
 
 
 {% endblock %}

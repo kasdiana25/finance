@@ -5,8 +5,10 @@
 
     <meta charset="UTF-8">
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>
         {% block title %}
@@ -14,9 +16,10 @@
         {% endblock %}
     </title>
 
-
-    <link rel="stylesheet"
-          href="{{ url_for('static', path='css/style.css') }}">
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', path='css/style.css') }}"
+    >
 
 </head>
 
@@ -27,107 +30,217 @@
 <div class="app">
 
 
-    <!-- =====================
+    <!-- =====================================================
          SIDEBAR
-    ====================== -->
-
+    ====================================================== -->
 
     <aside class="sidebar">
 
 
+        <!-- LOGO -->
+
         <div class="logo">
 
-            💰
+            <div class="logo-icon">
+                💰
+            </div>
 
-            <span>
-                Finance 
-            </span>
+            <div class="logo-text">
+                <strong>Finance</strong>
+                <span>Management</span>
+            </div>
 
         </div>
 
 
 
-        <nav>
+        <!-- =================================================
+             NAVIGATION
+        ================================================== -->
+
+        <nav class="sidebar-nav">
 
 
-            <a href="/home">
+            <!-- ================= ФИНАНСЫ ================= -->
 
-                🏠
+            <div class="nav-section-title">
+                ФИНАНСЫ
+            </div>
 
-                <span>
+
+            <a
+                href="/home"
+                class="nav-item {% if request.url.path == '/home' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">🏠</span>
+
+                <span class="nav-text">
                     Главная
                 </span>
 
             </a>
 
 
+            <a
+                href="/transactions-page"
+                class="nav-item {% if request.url.path == '/transactions-page' %}active{% endif %}"
+            >
 
-            <a href="/transactions-page">
+                <span class="nav-icon">💳</span>
 
-                💳
-
-                <span>
+                <span class="nav-text">
                     Операции
                 </span>
 
             </a>
 
 
+            <a
+                href="/calendar"
+                class="nav-item {% if request.url.path == '/calendar' %}active{% endif %}"
+            >
 
-            <a href="/transactions/add">
+                <span class="nav-icon">📅</span>
 
-                ➕
-
-                <span>
-                    Добавить
-                </span>
-
-            </a>
-
-
-
-            <a href="/calendar">
-
-                📅
-
-                <span>
+                <span class="nav-text">
                     Календарь
                 </span>
 
             </a>
 
 
+            <a
+                href="/recurring-page"
+                class="nav-item {% if request.url.path == '/recurring-page' %}active{% endif %}"
+            >
 
-            <a href="/forecast-page">
+                <span class="nav-icon">🔄</span>
 
-                📊
-
-                <span>
-                    Прогноз
-                </span>
-
-            </a>
-
-
-
-            <a href="/notifications-page">
-
-                🔔
-
-                <span>
-                    Уведомления
-                </span>
-
-            </a>
-
-
-
-            <a href="/recurring-page">
-
-                🔄
-
-                <span>
+                <span class="nav-text">
                     Подписки
+                </span>
+
+            </a>
+
+
+
+            <!-- ================= УПРАВЛЕНИЕ ================= -->
+
+            <div class="nav-section-title">
+                УПРАВЛЕНИЕ
+            </div>
+
+
+            <a
+                href="/purchase-requests"
+                class="nav-item {% if request.url.path == '/purchase-requests' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">📦</span>
+
+                <span class="nav-text">
+                    Заявки
+                </span>
+
+            </a>
+
+
+            <a
+                href="/products"
+                class="nav-item {% if request.url.path == '/products' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">🛒</span>
+
+                <span class="nav-text">
+                    Товары
+                </span>
+
+            </a>
+
+
+            <a
+                href="/inventory"
+                class="nav-item {% if request.url.path == '/inventory' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">🏷️</span>
+
+                <span class="nav-text">
+                    Инвентаризация
+                </span>
+
+            </a>
+
+
+
+            <!-- ================= СОТРУДНИКИ ================= -->
+
+            <div class="nav-section-title">
+                СОТРУДНИКИ
+            </div>
+
+
+            <a
+                href="/money-transfers"
+                class="nav-item {% if request.url.path == '/money-transfers' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">💰</span>
+
+                <span class="nav-text">
+                    Выданные деньги
+                </span>
+
+            </a>
+
+
+            <a
+                href="/receipts"
+                class="nav-item {% if request.url.path == '/receipts' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">🧾</span>
+
+                <span class="nav-text">
+                    Чеки
+                </span>
+
+            </a>
+
+
+            <a
+                href="/employees"
+                class="nav-item {% if request.url.path == '/employees' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">👥</span>
+
+                <span class="nav-text">
+                    Сотрудники
+                </span>
+
+            </a>
+
+
+
+            <!-- ================= АНАЛИТИКА ================= -->
+
+            <div class="nav-section-title analytics-title">
+                АНАЛИТИКА
+            </div>
+
+
+            <a
+                href="/reports"
+                class="nav-item analytics-item {% if request.url.path == '/reports' %}active{% endif %}"
+            >
+
+                <span class="nav-icon">📈</span>
+
+                <span class="nav-text">
+                    Отчёты
                 </span>
 
             </a>
@@ -137,18 +250,25 @@
 
 
 
+        <!-- =================================================
+             SIDEBAR FOOTER
+        ================================================== -->
+
         <div class="sidebar-footer">
 
+            <div class="sidebar-footer-icon">
+                ⚙️
+            </div>
 
-            <p>
-                Finance 
-            </p>
+            <div>
+                <div class="sidebar-footer-title">
+                    Finance
+                </div>
 
-
-            <small>
-                v1.0
-            </small>
-
+                <div class="sidebar-footer-version">
+                    Система учета · v1.0
+                </div>
+            </div>
 
         </div>
 
@@ -157,20 +277,19 @@
 
 
 
-
-
-    <!-- =====================
+    <!-- =====================================================
          MAIN
-    ====================== -->
-
+    ====================================================== -->
 
     <main class="main">
 
 
+        <!-- TOPBAR -->
+
         <header class="topbar">
 
 
-            <div>
+            <div class="topbar-info">
 
                 <h2>
                     Панель управления
@@ -180,16 +299,26 @@
                     Автоматизированный учет финансов
                 </p>
 
-
             </div>
-
 
 
             <div class="profile">
 
-                👤
+                <div class="profile-avatar">
+                    👤
+                </div>
 
-                Администратор
+                <div class="profile-info">
+
+                    <span class="profile-name">
+                        Администратор
+                    </span>
+
+                    <span class="profile-role">
+                        Управление системой
+                    </span>
+
+                </div>
 
             </div>
 
@@ -198,21 +327,18 @@
 
 
 
-
+        <!-- CONTENT -->
 
         <section class="page">
-
 
             {% block content %}
 
             {% endblock %}
 
-
         </section>
 
 
     </main>
-
 
 
 </div>

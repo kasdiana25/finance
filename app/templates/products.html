@@ -1,0 +1,1043 @@
+{% extends "base.html" %}
+
+{% block title %}Товары — Finance Max Alice{% endblock %}
+
+{% block content %}
+
+<div class="products-page">
+
+    <!-- ========================= -->
+    <!-- ЗАГОЛОВОК -->
+    <!-- ========================= -->
+
+    <div class="products-header">
+
+        <div>
+            <span class="section-label">
+                УПРАВЛЕНИЕ
+            </span>
+
+            <h1>Товары</h1>
+
+            <p>
+                Справочник товаров и материальных ценностей компании
+            </p>
+        </div>
+
+        <button
+            type="button"
+            class="products-add-button"
+            onclick="openAddModal()"
+        >
+            <span>＋</span>
+            Добавить товар
+        </button>
+
+    </div>
+
+
+    <!-- ========================= -->
+    <!-- СТАТИСТИКА -->
+    <!-- ========================= -->
+
+    <div class="products-statistics">
+
+        <div class="products-stat-card">
+
+            <div class="products-stat-icon">
+                📦
+            </div>
+
+            <div>
+                <span>Всего товаров</span>
+                <strong>{{ products|length }}</strong>
+            </div>
+
+        </div>
+
+
+        <div class="products-stat-card">
+
+            <div class="products-stat-icon">
+                🏷️
+            </div>
+
+            <div>
+                <span>Инвентарные</span>
+
+                <strong>
+                    {{ products|selectattr("is_inventory", "equalto", true)|list|length }}
+                </strong>
+
+            </div>
+
+        </div>
+
+
+        <div class="products-stat-card">
+
+            <div class="products-stat-icon">
+                🛒
+            </div>
+
+            <div>
+                <span>Расходные</span>
+
+                <strong>
+                    {{ products|selectattr("is_inventory", "equalto", false)|list|length }}
+                </strong>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ========================= -->
+    <!-- СПИСОК ТОВАРОВ -->
+    <!-- ========================= -->
+
+    <div class="products-container">
+
+        <div class="products-container-header">
+
+            <div>
+                <h2>Каталог товаров</h2>
+                <p>Все товары, используемые компанией</p>
+            </div>
+
+        </div>
+
+
+        {% if products %}
+
+            <div class="products-grid">
+
+                {% for product in products %}
+
+                    <div class="product-card">
+
+                        <div class="product-card-top">
+
+                            <div class="product-icon">
+
+                                {% if product.is_inventory %}
+                                    🖥️
+                                {% else %}
+                                    📦
+                                {% endif %}
+
+                            </div>
+
+
+                            {% if product.is_inventory %}
+
+                                <span class="product-type inventory">
+                                    Инвентарный
+                                </span>
+
+                            {% else %}
+
+                                <span class="product-type consumable">
+                                    Расходный
+                                </span>
+
+                            {% endif %}
+
+                        </div>
+
+
+                        <div class="product-card-body">
+
+                            <h3>
+                                {{ product.name }}
+                            </h3>
+
+
+                            {% if product.category %}
+
+                                <div class="product-category">
+                                    {{ product.category }}
+                                </div>
+
+                            {% endif %}
+
+
+                            {% if product.description %}
+
+                                <p>
+                                    {{ product.description }}
+                                </p>
+
+                            {% else %}
+
+                                <p class="product-no-description">
+                                    Описание отсутствует
+                                </p>
+
+                            {% endif %}
+
+
+                            <div class="product-info">
+
+                                <div>
+                                    <span>Единица</span>
+                                    <strong>{{ product.unit }}</strong>
+                                </div>
+
+                                <div>
+                                    <span>ID</span>
+                                    <strong>#{{ product.id }}</strong>
+                                </div>
+
+                            </div>
+
+
+                            {% if product.is_inventory and product.room %}
+
+                                <div class="product-info">
+
+                                    <div>
+                                        <span>Кабинет</span>
+                                        <strong>{{ product.room }}</strong>
+                                    </div>
+
+                                </div>
+
+                            {% endif %}
+
+                        </div>
+
+
+                        <div class="product-card-footer">
+
+                            <button
+                                type="button"
+                                class="product-edit-button"
+                                onclick="openEditModal({{ product.id }})"
+                            >
+                                ✏️ Редактировать
+                            </button>
+
+
+                            <button
+                                type="button"
+                                class="product-delete-button"
+                                onclick="deleteProduct({{ product.id }})"
+                            >
+                                🗑️
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <div class="products-empty">
+
+                <div class="products-empty-icon">
+                    📦
+                </div>
+
+                <h3>
+                    Товаров пока нет
+                </h3>
+
+                <p>
+                    Добавьте первый товар в справочник.
+                </p>
+
+                <button
+                    type="button"
+                    class="products-add-button"
+                    onclick="openAddModal()"
+                >
+                    ＋ Добавить товар
+                </button>
+
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ -->
+<!-- ===================================================== -->
+
+<div
+    id="addModal"
+    class="products-modal"
+    onclick="closeModalOutside(event, 'addModal')"
+>
+
+    <div class="products-modal-window">
+
+        <div class="products-modal-header">
+
+            <div>
+
+                <span class="section-label">
+                    НОВЫЙ ТОВАР
+                </span>
+
+                <h2>
+                    Добавить товар
+                </h2>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="products-close-button"
+                onclick="closeAddModal()"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <form id="productForm">
+
+            <!-- Название -->
+
+            <div class="product-form-field">
+
+                <label>
+                    Название товара
+                </label>
+
+                <input
+                    type="text"
+                    id="productName"
+                    placeholder="Например: Ноутбук Lenovo"
+                    required
+                >
+
+            </div>
+
+
+            <!-- Категория + единица -->
+
+            <div class="product-form-row">
+
+                <div class="product-form-field">
+
+                    <label>
+                        Категория
+                    </label>
+
+                    <input
+                        type="text"
+                        id="productCategory"
+                        placeholder="Техника"
+                    >
+
+                </div>
+
+
+                <div class="product-form-field">
+
+                    <label>
+                        Единица
+                    </label>
+
+                    <select id="productUnit">
+
+                        <option value="шт.">шт.</option>
+                        <option value="кг">кг</option>
+                        <option value="л">л</option>
+                        <option value="уп.">уп.</option>
+                        <option value="компл.">компл.</option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+
+            <!-- Описание -->
+
+            <div class="product-form-field">
+
+                <label>
+                    Описание
+                </label>
+
+                <textarea
+                    id="productDescription"
+                    rows="4"
+                    placeholder="Дополнительная информация о товаре"
+                ></textarea>
+
+            </div>
+
+
+            <!-- Инвентарный объект -->
+
+            <label class="inventory-checkbox">
+
+                <input
+                    type="checkbox"
+                    id="productInventory"
+                >
+
+                <span>
+
+                    <strong>
+                        Инвентарный объект
+                    </strong>
+
+                    <small>
+                        Например: ноутбук, монитор, принтер или мебель
+                    </small>
+
+                </span>
+
+            </label>
+
+
+            <!-- Кабинет -->
+
+            <div
+                class="product-form-field inventory-room-field"
+                id="addRoomField"
+                style="display: none;"
+            >
+
+                <label>
+                    Кабинет
+                </label>
+
+                <input
+                    type="text"
+                    id="productRoom"
+                    placeholder="Например: 305"
+                >
+
+                <small>
+                    Укажите кабинет, в котором находится имущество
+                </small>
+
+            </div>
+
+
+            <!-- Кнопки -->
+
+            <div class="products-modal-footer">
+
+                <button
+                    type="button"
+                    class="products-cancel-button"
+                    onclick="closeAddModal()"
+                >
+                    Отмена
+                </button>
+
+                <button
+                    type="submit"
+                    class="products-save-button"
+                >
+                    Добавить товар
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ -->
+<!-- ===================================================== -->
+
+<div
+    id="editModal"
+    class="products-modal"
+    onclick="closeModalOutside(event, 'editModal')"
+>
+
+    <div class="products-modal-window">
+
+        <div class="products-modal-header">
+
+            <div>
+
+                <span class="section-label">
+                    ИЗМЕНЕНИЕ
+                </span>
+
+                <h2>
+                    Редактировать товар
+                </h2>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="products-close-button"
+                onclick="closeEditModal()"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <form id="editProductForm">
+
+            <input
+                type="hidden"
+                id="editProductId"
+            >
+
+
+            <!-- Название -->
+
+            <div class="product-form-field">
+
+                <label>
+                    Название товара
+                </label>
+
+                <input
+                    type="text"
+                    id="editProductName"
+                    required
+                >
+
+            </div>
+
+
+            <!-- Категория + единица -->
+
+            <div class="product-form-row">
+
+                <div class="product-form-field">
+
+                    <label>
+                        Категория
+                    </label>
+
+                    <input
+                        type="text"
+                        id="editProductCategory"
+                    >
+
+                </div>
+
+
+                <div class="product-form-field">
+
+                    <label>
+                        Единица
+                    </label>
+
+                    <select id="editProductUnit">
+
+                        <option value="шт.">шт.</option>
+                        <option value="кг">кг</option>
+                        <option value="л">л</option>
+                        <option value="уп.">уп.</option>
+                        <option value="компл.">компл.</option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+
+            <!-- Описание -->
+
+            <div class="product-form-field">
+
+                <label>
+                    Описание
+                </label>
+
+                <textarea
+                    id="editProductDescription"
+                    rows="4"
+                ></textarea>
+
+            </div>
+
+
+            <!-- Инвентарный объект -->
+
+            <label class="inventory-checkbox">
+
+                <input
+                    type="checkbox"
+                    id="editProductInventory"
+                >
+
+                <span>
+
+                    <strong>
+                        Инвентарный объект
+                    </strong>
+
+                    <small>
+                        Товар будет использоваться для учёта имущества
+                    </small>
+
+                </span>
+
+            </label>
+
+
+            <!-- Кабинет -->
+
+            <div
+                class="product-form-field inventory-room-field"
+                id="editRoomField"
+                style="display: none;"
+            >
+
+                <label>
+                    Кабинет
+                </label>
+
+                <input
+                    type="text"
+                    id="editProductRoom"
+                    placeholder="Например: 305"
+                >
+
+                <small>
+                    Укажите кабинет, в котором находится имущество
+                </small>
+
+            </div>
+
+
+            <!-- Кнопки -->
+
+            <div class="products-modal-footer">
+
+                <button
+                    type="button"
+                    class="products-cancel-button"
+                    onclick="closeEditModal()"
+                >
+                    Отмена
+                </button>
+
+                <button
+                    type="submit"
+                    class="products-save-button"
+                >
+                    Сохранить
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<script>
+
+/* ===================================================== */
+/* ДОБАВЛЕНИЕ */
+/* ===================================================== */
+
+function openAddModal() {
+
+    document
+        .getElementById("addModal")
+        .classList.add("active");
+
+}
+
+
+function closeAddModal() {
+
+    document
+        .getElementById("addModal")
+        .classList.remove("active");
+
+}
+
+
+/* ===================================================== */
+/* ПОКАЗ / СКРЫТИЕ КАБИНЕТА ПРИ ДОБАВЛЕНИИ */
+/* ===================================================== */
+
+const productInventoryCheckbox =
+    document.getElementById("productInventory");
+
+const addRoomField =
+    document.getElementById("addRoomField");
+
+
+function updateAddRoomField() {
+
+    if (productInventoryCheckbox.checked) {
+
+        addRoomField.style.display = "block";
+
+    } else {
+
+        addRoomField.style.display = "none";
+
+        document.getElementById("productRoom").value = "";
+
+    }
+
+}
+
+
+productInventoryCheckbox.addEventListener(
+    "change",
+    updateAddRoomField
+);
+
+
+/* ===================================================== */
+/* РЕДАКТИРОВАНИЕ */
+/* ===================================================== */
+
+async function openEditModal(id) {
+
+    try {
+
+        const response = await fetch(
+            `/api/products/${id}`
+        );
+
+
+        if (!response.ok) {
+
+            alert("Не удалось загрузить товар");
+
+            return;
+
+        }
+
+
+        const product = await response.json();
+
+
+        document.getElementById("editProductId").value =
+            product.id;
+
+
+        document.getElementById("editProductName").value =
+            product.name || "";
+
+
+        document.getElementById("editProductCategory").value =
+            product.category || "";
+
+
+        document.getElementById("editProductUnit").value =
+            product.unit || "шт.";
+
+
+        document.getElementById("editProductDescription").value =
+            product.description || "";
+
+
+        document.getElementById("editProductInventory").checked =
+            product.is_inventory;
+
+
+        document.getElementById("editProductRoom").value =
+            product.room || "";
+
+
+        updateEditRoomField();
+
+
+        document
+            .getElementById("editModal")
+            .classList.add("active");
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert("Ошибка при загрузке товара");
+
+    }
+
+}
+
+
+function closeEditModal() {
+
+    document
+        .getElementById("editModal")
+        .classList.remove("active");
+
+}
+
+
+/* ===================================================== */
+/* ПОКАЗ / СКРЫТИЕ КАБИНЕТА ПРИ РЕДАКТИРОВАНИИ */
+/* ===================================================== */
+
+const editProductInventoryCheckbox =
+    document.getElementById("editProductInventory");
+
+const editRoomField =
+    document.getElementById("editRoomField");
+
+
+function updateEditRoomField() {
+
+    if (editProductInventoryCheckbox.checked) {
+
+        editRoomField.style.display = "block";
+
+    } else {
+
+        editRoomField.style.display = "none";
+
+        document.getElementById("editProductRoom").value = "";
+
+    }
+
+}
+
+
+editProductInventoryCheckbox.addEventListener(
+    "change",
+    updateEditRoomField
+);
+
+
+/* ===================================================== */
+/* ЗАКРЫТИЕ ПО КЛИКУ СНАРУЖИ */
+/* ===================================================== */
+
+function closeModalOutside(event, modalId) {
+
+    if (event.target.id === modalId) {
+
+        document
+            .getElementById(modalId)
+            .classList.remove("active");
+
+    }
+
+}
+
+
+/* ===================================================== */
+/* ДОБАВИТЬ ТОВАР */
+/* ===================================================== */
+
+document
+    .getElementById("productForm")
+    .addEventListener("submit", async function(event) {
+
+        event.preventDefault();
+
+
+        const isInventory =
+            document.getElementById("productInventory").checked;
+
+
+        const room =
+            document.getElementById("productRoom").value.trim();
+
+
+        const data = {
+
+            name:
+                document.getElementById("productName").value.trim(),
+
+            category:
+                document.getElementById("productCategory").value.trim() || null,
+
+            unit:
+                document.getElementById("productUnit").value,
+
+            description:
+                document.getElementById("productDescription").value.trim() || null,
+
+            is_inventory:
+                isInventory,
+
+            room:
+                isInventory && room
+                    ? room
+                    : null
+
+        };
+
+
+        const response = await fetch(
+            "/api/products",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify(data)
+            }
+        );
+
+
+        if (!response.ok) {
+
+            const errorText = await response.text();
+
+            console.error(errorText);
+
+            alert("Не удалось добавить товар");
+
+            return;
+
+        }
+
+
+        location.reload();
+
+    });
+
+
+/* ===================================================== */
+/* СОХРАНИТЬ ИЗМЕНЕНИЯ */
+/* ===================================================== */
+
+document
+    .getElementById("editProductForm")
+    .addEventListener("submit", async function(event) {
+
+        event.preventDefault();
+
+
+        const id =
+            document.getElementById("editProductId").value;
+
+
+        const isInventory =
+            document.getElementById("editProductInventory").checked;
+
+
+        const room =
+            document.getElementById("editProductRoom").value.trim();
+
+
+        const data = {
+
+            name:
+                document.getElementById("editProductName").value.trim(),
+
+            category:
+                document.getElementById("editProductCategory").value.trim() || null,
+
+            unit:
+                document.getElementById("editProductUnit").value,
+
+            description:
+                document.getElementById("editProductDescription").value.trim() || null,
+
+            is_inventory:
+                isInventory,
+
+            room:
+                isInventory && room
+                    ? room
+                    : null
+
+        };
+
+
+        const response = await fetch(
+            `/api/products/${id}`,
+            {
+                method: "PUT",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify(data)
+            }
+        );
+
+
+        if (!response.ok) {
+
+            const errorText = await response.text();
+
+            console.error(errorText);
+
+            alert("Не удалось изменить товар");
+
+            return;
+
+        }
+
+
+        location.reload();
+
+    });
+
+
+/* ===================================================== */
+/* УДАЛЕНИЕ */
+/* ===================================================== */
+
+async function deleteProduct(id) {
+
+    if (!confirm(
+        "Вы действительно хотите удалить этот товар?"
+    )) {
+
+        return;
+
+    }
+
+
+    const response = await fetch(
+        `/api/products/${id}`,
+        {
+            method: "DELETE"
+        }
+    );
+
+
+    if (!response.ok) {
+
+        alert("Не удалось удалить товар");
+
+        return;
+
+    }
+
+
+    location.reload();
+
+}
+
+</script>
+
+{% endblock %}

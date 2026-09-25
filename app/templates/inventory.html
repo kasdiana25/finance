@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Инвентаризация — Finance Max Alice{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-header">
+
+    <div>
+        <span class="section-label">
+            УЧЁТ ИМУЩЕСТВА
+        </span>
+
+        <h1>
+            Инвентаризация
+        </h1>
+
+        <p>
+            Учёт имущества компании
+        </p>
+    </div>
+
+</div>
+
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <div>
+            <h2>
+                Инвентарные объекты
+            </h2>
+
+            <p>
+                Всего объектов: {{ inventory_items|length }}
+            </p>
+        </div>
+
+    </div>
+
+
+    {% if inventory_items %}
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Инвентарный номер</th>
+                        <th>Товар</th>
+                        <th>Серийный номер</th>
+                        <th>Кабинет</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for item in inventory_items %}
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    {{ item.inventory_number }}
+                                </strong>
+                            </td>
+
+                            <td>
+                                <strong>{{ item.product_name }}</strong>
+                            </td>
+
+                            <td>
+                                {{ item.serial_number or "—" }}
+                            </td>
+
+                            <td>
+                                {{ item.room or "—" }}
+                            </td>
+
+                            <td>
+                                <span class="badge">
+                                    {{ item.status }}
+                                </span>
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <div class="empty-state">
+
+            <h3>
+                Инвентарных объектов пока нет
+            </h3>
+
+            <p>
+                Они появятся после поступления товаров,
+                участвующих в инвентаризации.
+            </p>
+
+        </div>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}

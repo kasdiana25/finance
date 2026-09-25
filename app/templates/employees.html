@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Сотрудники{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-header">
+    <div>
+        <h1>Сотрудники</h1>
+        <p>Управление сотрудниками и доступом к системе</p>
+    </div>
+</div>
+
+
+<div class="panel">
+
+    <div class="panel-header">
+        <div>
+            <h2>Все сотрудники</h2>
+            <p class="panel-description">
+                Сотрудники, зарегистрированные через Telegram
+            </p>
+        </div>
+
+        <div class="panel-header-stat">
+            {{ employees|length }} сотрудников
+        </div>
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Сотрудник</th>
+                    <th>Telegram ID</th>
+                    <th>Роль</th>
+                    <th>Статус</th>
+                    <th>Управление</th>
+                </tr>
+            </thead>
+
+
+            <tbody>
+
+                {% for employee in employees %}
+
+                <tr>
+
+                    <td>
+                        <div class="employee-name">
+                            <div class="employee-avatar">
+                                {{ employee.full_name[:1]|upper }}
+                            </div>
+
+                            <div>
+                                <strong>
+                                    {{ employee.full_name }}
+                                </strong>
+
+                                <span class="table-subtext">
+                                    ID сотрудника: {{ employee.id }}
+                                </span>
+                            </div>
+                        </div>
+                    </td>
+
+
+                    <td>
+                        <span class="telegram-id">
+                            {{ employee.telegram_id }}
+                        </span>
+                    </td>
+
+
+                    <td>
+
+                        {% if employee.role == "director" %}
+
+                        <span class="badge role-director">
+                            Директор
+                        </span>
+
+                        {% else %}
+
+                        <span class="badge role-employee">
+                            Сотрудник
+                        </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if employee.is_active %}
+
+                        <span class="badge status-active">
+                            ● Активен
+                        </span>
+
+                        {% else %}
+
+                        <span class="badge status-inactive">
+                            ● Заблокирован
+                        </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        <div class="employee-actions">
+
+                            <form
+                                method="post"
+                                action="/employees/{{ employee.id }}/status"
+                            >
+
+                                <input
+                                    type="hidden"
+                                    name="is_active"
+                                    value="{% if employee.is_active %}false{% else %}true{% endif %}"
+                                >
+
+                                {% if employee.is_active %}
+
+                                <button
+                                    type="submit"
+                                    class="action-button danger"
+                                >
+                                    Заблокировать
+                                </button>
+
+                                {% else %}
+
+                                <button
+                                    type="submit"
+                                    class="action-button success"
+                                >
+                                    Активировать
+                                </button>
+
+                                {% endif %}
+
+                            </form>
+
+
+                            <form
+                                method="post"
+                                action="/employees/{{ employee.id }}/role"
+                            >
+
+                                {% if employee.role == "director" %}
+
+                                <input
+                                    type="hidden"
+                                    name="role"
+                                    value="employee"
+                                >
+
+                                <button
+                                    type="submit"
+                                    class="action-button secondary"
+                                >
+                                    Сделать сотрудником
+                                </button>
+
+                                {% else %}
+
+                                <input
+                                    type="hidden"
+                                    name="role"
+                                    value="director"
+                                >
+
+                                <button
+                                    type="submit"
+                                    class="action-button secondary"
+                                >
+                                    Сделать директором
+                                </button>
+
+                                {% endif %}
+
+                            </form>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+                {% else %}
+
+                <tr>
+
+                    <td
+                        colspan="5"
+                        class="empty-table"
+                    >
+
+                        <div class="empty-table-content">
+
+                            <div class="empty-table-icon">
+                                👥
+                            </div>
+
+                            <h3>
+                                Сотрудников пока нет
+                            </h3>
+
+                            <p>
+                                Сотрудники появятся после регистрации
+                                через Telegram-бота.
+                            </p>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<style>
+
+.employee-name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.employee-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef2ff;
+    color: #4f46e5;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.employee-name strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.table-subtext {
+    display: block;
+    font-size: 12px;
+    color: #8b95a7;
+}
+
+.telegram-id {
+    font-family: monospace;
+    color: #667085;
+}
+
+.role-director {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.role-employee {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.status-active {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-inactive {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.employee-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.action-button {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.action-button.danger {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.action-button.success {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.action-button.secondary {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.panel-header-stat {
+    font-size: 14px;
+    color: #667085;
+}
+
+</style>
+
+{% endblock %}

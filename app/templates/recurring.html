@@ -1,119 +1,147 @@
 {% extends "base.html" %}
 
-
-
-{% block title %}
-Подписки
-{% endblock %}
-
-
+{% block title %}Подписки — Finance Max Alice{% endblock %}
 
 {% block content %}
 
-
 <div class="dashboard-header">
 
+    <div>
 
-<div>
+        <span class="section-label">
+            РЕГУЛЯРНЫЕ ПЛАТЕЖИ
+        </span>
 
-<h1>
-🔄 Регулярные платежи
-</h1>
+        <h1>
+            🔄 Подписки
+        </h1>
 
+        <p>
+            Автоматические регулярные списания компании
+        </p>
 
-<p>
-Подписки и автоматические списания
-</p>
-
+    </div>
 
 </div>
-
-
-</div>
-
 
 
 <div class="panel">
 
+    <div class="panel-header">
 
-<div class="panel-header">
+        <div>
+
+            <h2>
+                Активные платежи
+            </h2>
+
+            <p>
+                Всего подписок: {{ recurring|length }}
+            </p>
+
+        </div>
+
+    </div>
 
 
-<h2>
-Активные платежи
-</h2>
+    {% if recurring %}
 
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+                        <th>Название</th>
+                        <th>Категория</th>
+                        <th>Сумма</th>
+                        <th>Периодичность</th>
+                        <th>Дата списания</th>
+                        <th>Статус</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for item in recurring %}
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    {{ item.name }}
+                                </strong>
+                            </td>
+
+                            <td>
+                                {{ item.category }}
+                            </td>
+
+                            <td>
+                                {{ item.amount }} ₽
+                            </td>
+
+                            <td>
+                                {% if item.frequency == "monthly" %}
+                                    Ежемесячно
+                                {% elif item.frequency == "weekly" %}
+                                    Еженедельно
+                                {% else %}
+                                    {{ item.frequency }}
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {{ item.next_payment_date }}
+                            </td>
+
+                            <td>
+
+                                {% if item.is_active %}
+
+                                    <span class="badge">
+                                        Активна
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="badge">
+                                        Отключена
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <div class="empty-state">
+
+            <h3>
+                Подписок пока нет
+            </h3>
+
+            <p>
+                Здесь будут отображаться регулярные платежи.
+            </p>
+
+        </div>
+
+    {% endif %}
 
 </div>
-
-
-
-
-<table>
-
-
-<thead>
-
-<tr>
-
-<th>
-Название
-</th>
-
-<th>
-Сумма
-</th>
-
-<th>
-Дата списания
-</th>
-
-
-</tr>
-
-</thead>
-
-
-
-<tbody>
-
-
-{% for item in recurring %}
-
-
-<tr>
-
-
-<td>
-{{ item.name }}
-</td>
-
-
-<td>
-{{ item.amount }} ₽
-</td>
-
-
-<td>
-{{ item.next_payment_date }}
-</td>
-
-
-</tr>
-
-
-{% endfor %}
-
-
-</tbody>
-
-
-</table>
-
-
-
-</div>
-
-
 
 {% endblock %}

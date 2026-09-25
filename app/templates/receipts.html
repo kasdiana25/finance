@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+
+{% block title %}Чеки{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-header">
+
+    <div>
+        <h1>Чеки</h1>
+
+        <p>
+            Чеки и подтверждения расходов сотрудников
+        </p>
+    </div>
+
+</div>
+
+
+<div class="stats-grid">
+
+    <div class="stat-card">
+
+        <div class="stat-card-icon">
+            🧾
+        </div>
+
+        <div>
+            <span class="stat-label">
+                Всего чеков
+            </span>
+
+            <strong class="stat-value">
+                {{ receipts|length }}
+            </strong>
+        </div>
+
+    </div>
+
+
+    <div class="stat-card">
+
+        <div class="stat-card-icon">
+            💰
+        </div>
+
+        <div>
+            <span class="stat-label">
+                С подтверждённой суммой
+            </span>
+
+            <strong class="stat-value">
+                {{
+                    receipts
+                    |selectattr("receipt_amount")
+                    |list
+                    |length
+                }}
+            </strong>
+        </div>
+
+    </div>
+
+
+    <div class="stat-card">
+
+        <div class="stat-card-icon">
+            📎
+        </div>
+
+        <div>
+            <span class="stat-label">
+                Файлы
+            </span>
+
+            <strong class="stat-value">
+                {{ receipts|length }}
+            </strong>
+        </div>
+
+    </div>
+
+</div>
+
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <div>
+
+            <h2>
+                История чеков
+            </h2>
+
+            <p class="panel-description">
+                Чеки, отправленные сотрудниками через Telegram
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Сотрудник
+                    </th>
+
+                    <th>
+                        Магазин
+                    </th>
+
+                    <th>
+                        Сумма
+                    </th>
+
+                    <th>
+                        Дата чека
+                    </th>
+
+                    <th>
+                        Расход
+                    </th>
+
+                    <th>
+                        Файл
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                {% for receipt in receipts %}
+
+                <tr>
+
+                    <td>
+
+                        {% set employee_name = "Неизвестный сотрудник" %}
+
+                        {% for employee in employees %}
+
+                            {% if employee.telegram_id == receipt.telegram_user_id %}
+
+                                {% set employee_name = employee.full_name %}
+
+                            {% endif %}
+
+                        {% endfor %}
+
+                        <strong>
+                            {{ employee_name }}
+                        </strong>
+
+                    </td>
+
+
+                    <td>
+
+                        {% if receipt.shop_name %}
+
+                            {{ receipt.shop_name }}
+
+                        {% else %}
+
+                            <span class="muted">
+                                Не определён
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if receipt.receipt_amount is not none %}
+
+                            <strong class="amount">
+                                {{ "%.2f"|format(receipt.receipt_amount) }} ₽
+                            </strong>
+
+                        {% else %}
+
+                            <span class="muted">
+                                Не определена
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if receipt.receipt_date %}
+
+                            {{ receipt.receipt_date }}
+
+                        {% else %}
+
+                            <span class="muted">
+                                —
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if receipt.transaction_id %}
+
+                            <span class="badge badge-success">
+                                #{{ receipt.transaction_id }}
+                            </span>
+
+                        {% else %}
+
+                            <span class="badge badge-warning">
+                                Не привязан
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if receipt.filepath %}
+
+                        <a
+                            href="/receipts/file/{{ receipt.id }}"
+                            target="_blank"
+                            class="file-button"
+                        >
+                            🧾 Открыть
+                        </a>
+
+                        {% else %}
+
+                        <span class="muted">
+                            Нет файла
+                        </span>
+
+                        {% endif %}
+
+                    </td>
+
+                </tr>
+
+
+                {% else %}
+
+                <tr>
+
+                    <td
+                        colspan="6"
+                        class="empty-table"
+                    >
+
+                        <div class="empty-content">
+
+                            <div class="empty-icon">
+                                🧾
+                            </div>
+
+                            <h3>
+                                Чеков пока нет
+                            </h3>
+
+                            <p>
+                                Когда сотрудник отправит чек
+                                через Telegram, он появится здесь.
+                            </p>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<style>
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: white;
+    border: 1px solid #eaecf0;
+    border-radius: 14px;
+    padding: 18px 20px;
+}
+
+.stat-card-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f2f4f7;
+    border-radius: 12px;
+    font-size: 21px;
+}
+
+.stat-label {
+    display: block;
+    color: #667085;
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.stat-value {
+    font-size: 22px;
+    color: #101828;
+}
+
+.amount {
+    color: #4f46e5;
+}
+
+.muted {
+    color: #98a2b3;
+}
+
+.badge {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.badge-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.file-button {
+    display: inline-block;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: #eef2ff;
+    color: #4338ca;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.file-button:hover {
+    background: #e0e7ff;
+}
+
+.empty-content {
+    padding: 45px 20px;
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 42px;
+    margin-bottom: 12px;
+}
+
+.empty-content h3 {
+    margin: 0 0 7px;
+}
+
+.empty-content p {
+    margin: 0;
+    color: #667085;
+}
+
+@media (max-width: 800px) {
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+</style>
+
+{% endblock %}
