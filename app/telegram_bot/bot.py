@@ -3594,15 +3594,11 @@ async def check_subscription_notifications(
 
 def main():
 
-    TELEGRAM_PROXY = os.getenv("TELEGRAM_PROXY")
-
-    builder = ApplicationBuilder().token(BOT_TOKEN)
-
-    if TELEGRAM_PROXY:
-        builder = builder.proxy(TELEGRAM_PROXY)
-        builder = builder.get_updates_proxy(TELEGRAM_PROXY)
-
-    application = builder.build()
+    application = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .build()
+    )
 
     # =====================================================
     # ПРОВЕРКА ПОДПИСОК
