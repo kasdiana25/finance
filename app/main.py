@@ -16,6 +16,8 @@ from fastapi.responses import (
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
+from starlette.middleware.sessions import SessionMiddleware
+
 from sqlalchemy.orm import Session
 from pathlib import Path
 
@@ -43,6 +45,53 @@ app = FastAPI(
     title="Finance Max Alice",
     description="Система автоматизации учета доходов и расходов",
     version="1.0.0"
+)
+
+
+# =========================================================
+# АВТОРИЗАЦИЯ ДИРЕКТОРА
+# =========================================================
+
+DIRECTOR_LOGIN = "director"
+DIRECTOR_PASSWORD = "123456"
+
+
+# =========================================================
+# ПРОВЕРКА АВТОРИЗАЦИИ
+# =========================================================
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+
+    # Эти страницы доступны без авторизации
+    if request.url.path in ["/login", "/logout"]:
+        return await call_next(request)
+
+    # Статические файлы доступны без авторизации
+    if request.url.path.startswith("/static"):
+        return await call_next(request)
+
+    # Проверяем авторизацию
+    if not request.session.get("director_authenticated"):
+        return RedirectResponse(
+            url="/login",
+            status_code=303
+        )
+
+    return await call_next(request)
+
+
+# =========================================================
+# SESSION MIDDLEWARE
+# =========================================================
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="finance-max-alice-director-secret-key-2026",
+    session_cookie="finance_max_alice_session",
+    max_age=60 * 60 * 8,
+    same_site="lax",
+    https_only=False
 )
 
 
@@ -76,15 +125,88 @@ app.mount(
 
 
 # =========================================================
+# LOGIN
+# =========================================================
+
+@app.get(
+    "/login",
+    response_class=HTMLResponse
+)
+def login_page(request: Request):
+
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={
+            "error": None
+        }
+    )
+
+
+# =========================================================
+# LOGIN POST
+# =========================================================
+
+@app.post(
+    "/login",
+    response_class=HTMLResponse
+)
+def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...)
+):
+
+    if (
+        username == DIRECTOR_LOGIN
+        and password == DIRECTOR_PASSWORD
+    ):
+
+        # Создаём сессию директора
+        request.session["director_authenticated"] = True
+        request.session["director_role"] = "director"
+
+        return RedirectResponse(
+            url="/home",
+            status_code=303
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={
+            "error": "Неверный логин или пароль"
+        },
+        status_code=401
+    )
+
+
+# =========================================================
+# LOGOUT
+# =========================================================
+
+@app.get("/logout")
+def logout(request: Request):
+
+    request.session.clear()
+
+    return RedirectResponse(
+        url="/login",
+        status_code=303
+    )
+
+
+# =========================================================
 # ROOT
 # =========================================================
 
 @app.get("/")
 def root():
-    return {
-        "message": "Finance Max Alice работает!"
-    }
 
+    return RedirectResponse(
+        url="/home",
+        status_code=303
+    )
 
 # =========================================================
 # API TRANSACTIONS
