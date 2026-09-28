@@ -128,6 +128,10 @@ async def send_subscription_notification(
 # ПОЛУЧЕНИЕ АКТИВНОЙ ВЫДАЧИ
 # =========================================================
 
+# =========================================================
+# ПОЛУЧЕНИЕ АКТИВНОЙ ВЫДАЧИ
+# =========================================================
+
 def get_active_money_transfer(
     db,
     telegram_id: int
@@ -153,7 +157,9 @@ def get_active_money_transfer(
         db.query(MoneyTransfer)
         .filter(
             MoneyTransfer.telegram_user_id == user.id,
-            MoneyTransfer.status == "issued"
+            MoneyTransfer.status.in_(
+                ["issued", "partially_spent"]
+            )
         )
         .order_by(
             MoneyTransfer.id.desc()
@@ -163,21 +169,12 @@ def get_active_money_transfer(
 
     for transfer in transfers:
 
-        spent = (
-            db.query(Receipt)
-            .filter(
-                Receipt.transfer_id == transfer.id,
-                Receipt.receipt_amount.isnot(None)
-            )
-            .all()
+        spent = get_transfer_spent_amount(
+            db,
+            transfer.id
         )
 
-        spent_amount = sum(
-            float(receipt.receipt_amount)
-            for receipt in spent
-        )
-
-        if spent_amount < float(transfer.amount):
+        if spent < float(transfer.amount):
             return transfer
 
     return None
@@ -187,15 +184,28 @@ def get_active_money_transfer(
 # РАСХОД ПО ВЫДАЧЕ
 # =========================================================
 
+# =========================================================
+# РАСХОД ПО ВЫДАЧЕ
+# =========================================================
+
 def get_transfer_spent_amount(
     db,
     transfer_id: int
 ):
+    """
+    Считает только те чеки, которые уже
+    реально привязаны к Transaction.
+
+    Поэтому неподтверждённые чеки не уменьшают
+    остаток выданных денег.
+    """
+
     receipts = (
         db.query(Receipt)
         .filter(
             Receipt.transfer_id == transfer_id,
-            Receipt.receipt_amount.isnot(None)
+            Receipt.receipt_amount.isnot(None),
+            Receipt.transaction_id.isnot(None)
         )
         .all()
     )
@@ -514,166 +524,104 @@ def detect_category(text: str):
 # =========================================================
 
 def extract_amount(text: str):
+    """
+    Извлекает денежную сумму из обычного текста.
+
+    Поддерживает:
+        3500
+        3500 ₽
+        3500 руб
+        3500 рублей
+        3 500
+        3 500 ₽
+        3500,50
+        3500.50
+        3 500,50 ₽
+    """
 
     if not text:
         return None
 
-    normalized = text.lower()
+    normalized = text.lower().strip()
+    normalized = normalized.replace("\u00a0", " ")
 
-    normalized = normalized.replace(
-        "₽",
-        " руб "
+    # Убираем обозначения валюты
+    normalized = normalized.replace("₽", " ")
+
+    normalized = re.sub(
+        r"\b(руб(?:\.|лей|ля)?|р\.)(?=\s|$)",
+        " ",
+        normalized
     )
 
-    normalized = normalized.replace(
-        "р.",
-        " руб "
+    # Сначала ищем числа с копейками:
+    # 3500,50
+    # 3500.50
+    # 3 500,50
+    # 3 500.50
+    decimal_matches = re.findall(
+        r"(?<!\d)"
+        r"\d+(?:[ \t]\d{3})*"
+        r"[.,]\d{1,2}"
+        r"(?!\d)",
+        normalized
     )
 
-    normalized = normalized.replace(
-        "р ",
-        " руб "
+    if decimal_matches:
+        value = decimal_matches[-1]
+
+        value = (
+            value
+            .replace(" ", "")
+            .replace(",", ".")
+        )
+
+        try:
+            amount = float(value)
+
+            if amount > 0:
+                return amount
+
+        except ValueError:
+            pass
+
+    # Затем обычные целые числа:
+    # 3500
+    # 1000
+    # 3 500
+    integer_matches = re.findall(
+        r"(?<!\d)"
+        r"\d{1,3}(?:[ \t]\d{3})+"
+        r"(?!\d)"
+        r"|"
+        r"(?<!\d)"
+        r"\d+"
+        r"(?!\d)",
+        normalized
     )
 
-    lines = [
-        line.strip()
-        for line in normalized.splitlines()
-        if line.strip()
-    ]
+    if not integer_matches:
+        return None
 
-    total_words = (
-        "итог",
-        "итого",
-        "всего",
-        "к оплате",
-        "оплате",
-        "сумма"
-    )
+    candidates = []
 
-    for i, line in enumerate(lines):
+    for value in integer_matches:
 
-        if not any(
-            word in line
-            for word in total_words
-        ):
+        clean_value = value.replace(" ", "")
+
+        try:
+            amount = float(clean_value)
+
+            if amount > 0:
+                candidates.append(amount)
+
+        except ValueError:
             continue
 
-        decimal_matches = re.findall(
-            r"(?<!\d)"
-            r"\d+(?:[ \t]\d{3})*"
-            r"[.,]\d{1,2}"
-            r"(?!\d)",
-            line
-        )
+    if not candidates:
+        return None
 
-        if decimal_matches:
-
-            value = decimal_matches[-1]
-
-            value = (
-                value
-                .replace(" ", "")
-                .replace(",", ".")
-            )
-
-            try:
-
-                amount = float(value)
-
-                if amount > 0:
-                    return amount
-
-            except ValueError:
-                pass
-
-        if i + 1 < len(lines):
-
-            next_line = lines[i + 1]
-
-            decimal_matches = re.findall(
-                r"(?<!\d)"
-                r"\d+(?:[ \t]\d{3})*"
-                r"[.,]\d{1,2}"
-                r"(?!\d)",
-                next_line
-            )
-
-            if decimal_matches:
-
-                value = decimal_matches[-1]
-
-                value = (
-                    value
-                    .replace(" ", "")
-                    .replace(",", ".")
-                )
-
-                try:
-
-                    amount = float(value)
-
-                    if amount > 0:
-                        return amount
-
-                except ValueError:
-                    pass
-
-        integer_matches = re.findall(
-            r"(?<!\d)\d+(?!\d)",
-            line
-        )
-
-        if integer_matches:
-
-            try:
-
-                amount = float(
-                    integer_matches[-1]
-                )
-
-                if amount > 0:
-                    return amount
-
-            except ValueError:
-                pass
-
-    for line in lines:
-
-        if (
-            "руб" not in line
-            and "₽" not in line
-        ):
-            continue
-
-        matches = re.findall(
-            r"(?<!\d)"
-            r"\d+(?:[ \t]\d{3})*"
-            r"[.,]?\d{0,2}"
-            r"(?!\d)",
-            line
-        )
-
-        for value in reversed(matches):
-
-            value = (
-                value
-                .replace(" ", "")
-                .replace(",", ".")
-            )
-
-            try:
-
-                amount = float(value)
-
-                if amount > 0:
-                    return amount
-
-            except ValueError:
-                pass
-
-    return None
-
-
+    return candidates[-1]
 # =========================================================
 # ПАРСИНГ ДАТЫ ЧЕКА
 # =========================================================
@@ -797,6 +745,15 @@ async def start(
 
     context.user_data.pop(
         "waiting_receipt_amount",
+        None
+    )
+    context.user_data.pop(
+    "pending_expense",
+    None
+    )
+
+    context.user_data.pop(
+        "receipt_confirmation",
         None
     )
 
@@ -955,6 +912,27 @@ async def handle_receipt(
 
         await update.message.reply_text(
             "👑 Отправка чеков доступна сотрудникам."
+        )
+
+        return
+
+     # =====================================================
+    # ПРОВЕРЯЕМ, ЕСТЬ ЛИ ОЖИДАЮЩИЙ РАСХОД
+    # =====================================================
+
+    pending_expense = context.user_data.get(
+        "pending_expense"
+    )
+
+    if not pending_expense:
+
+        await update.message.reply_text(
+            "⚠️ Я получила чек, но сейчас нет "
+            "расхода, к которому его можно привязать.\n\n"
+            "Сначала напишите, что вы потратили и сколько.\n\n"
+            "Например:\n"
+            "Потратил 3500 на материалы\n\n"
+            "После этого отправьте чек."
         )
 
         return
@@ -1143,9 +1121,26 @@ async def handle_receipt(
             ocr_text
         )
 
-    # =====================================================
+     # =====================================================
     # СОХРАНЯЕМ RECEIPT СРАЗУ
     # =====================================================
+
+    pending_expense = context.user_data.get(
+        "pending_expense"
+    )
+
+    if not pending_expense:
+
+        await update.message.reply_text(
+            "⚠️ Не найден ожидающий расход.\n\n"
+            "Сначала напишите сумму и назначение расхода."
+        )
+
+        return
+
+    transfer_id = pending_expense.get(
+        "transfer_id"
+    )
 
     db = get_db()
 
@@ -1153,22 +1148,10 @@ async def handle_receipt(
 
     try:
 
-        # Ищем активную выдачу
-        active_transfer = (
-            get_active_money_transfer(
-                db,
-                telegram_user.id
-            )
-        )
-
         receipt = Receipt(
             transaction_id=None,
             telegram_user_id=telegram_user.id,
-            transfer_id=(
-                active_transfer.id
-                if active_transfer
-                else None
-            ),
+            transfer_id=transfer_id,
             filename=filename,
             filepath=str(filepath),
             ocr_text=ocr_text,
@@ -1210,7 +1193,6 @@ async def handle_receipt(
     finally:
 
         db.close()
-
     # =====================================================
     # СУММА НЕ НАЙДЕНА
     # =====================================================
@@ -1249,21 +1231,43 @@ async def handle_receipt(
 # СОЗДАНИЕ ОПЕРАЦИИ ПО ЧЕКУ
 # =========================================================
 
+# =========================================================
+# СОЗДАНИЕ ОПЕРАЦИИ ПО ПОДТВЕРЖДЁННОМУ ЧЕКУ
+# =========================================================
+
 async def create_transaction_from_receipt(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     receipt_id: int,
-    amount: float
+    amount: float,
+    force_confirmed: bool = False
 ):
 
     telegram_user = update.effective_user
 
     if not telegram_user:
-        return
+        return False
+
+    pending_expense = context.user_data.get(
+        "pending_expense"
+    )
+
+    if not pending_expense:
+
+        await update.message.reply_text(
+            "⚠️ Не найден ожидающий расход.\n\n"
+            "Расход не был записан."
+        )
+
+        return False
 
     db = get_db()
 
     try:
+
+        # =================================================
+        # ПОЛУЧАЕМ ЧЕК
+        # =================================================
 
         receipt = (
             db.query(Receipt)
@@ -1279,7 +1283,28 @@ async def create_transaction_from_receipt(
                 "❌ Чек не найден."
             )
 
-            return
+            return False
+
+        # =================================================
+        # ЗАЩИТА ОТ ПОВТОРНОЙ ЗАПИСИ
+        # =================================================
+
+        if receipt.transaction_id:
+
+            await update.message.reply_text(
+                "⚠️ Этот чек уже был обработан.\n\n"
+                f"🧾 Чек №{receipt.id}\n"
+                f"💰 Сумма: "
+                f"{float(receipt.receipt_amount or 0):,.2f} ₽\n\n"
+                "Повторно добавлять этот расход "
+                "я не буду."
+            )
+
+            return False
+
+        # =================================================
+        # ПОЛЬЗОВАТЕЛЬ
+        # =================================================
 
         user = (
             db.query(TelegramUser)
@@ -1296,27 +1321,90 @@ async def create_transaction_from_receipt(
                 "❌ Пользователь не найден."
             )
 
-            return
+            return False
 
         # =================================================
-        # ПРОВЕРЯЕМ ВЫДАЧУ
+        # СУММА
+        # =================================================
+
+        amount = float(amount)
+
+        if amount <= 0:
+
+            await update.message.reply_text(
+                "❌ Сумма должна быть больше нуля."
+            )
+
+            return False
+
+        # =================================================
+        # СРАВНЕНИЕ С СУММОЙ, УКАЗАННОЙ СОТРУДНИКОМ
+        # =================================================
+
+        declared_amount = float(
+            pending_expense["amount"]
+        )
+
+        difference = abs(
+            amount - declared_amount
+        )
+
+        # Если сумма отличается и сотрудник ещё
+        # не подтвердил её вручную
+        if difference > 0.01 and not force_confirmed:
+
+            receipt.receipt_amount = amount
+
+            context.user_data[
+                "receipt_confirmation"
+            ] = {
+                "receipt_id": receipt.id,
+                "receipt_amount": amount,
+                "declared_amount": declared_amount
+            }
+
+            db.commit()
+
+            await update.message.reply_text(
+                "⚠️ Сумма в чеке отличается "
+                "от указанной суммы.\n\n"
+                f"📝 Вы указали: "
+                f"{declared_amount:,.2f} ₽\n"
+                f"🧾 В чеке: "
+                f"{amount:,.2f} ₽\n"
+                f"📊 Разница: "
+                f"{difference:,.2f} ₽\n\n"
+                "Подтвердите сумму из чека:\n\n"
+                "✅ ДА — если сумма в чеке правильная.\n"
+                "❌ НЕТ — если чек ошибочный.\n\n"
+                "До подтверждения расход НЕ будет записан."
+            )
+
+            return False
+
+        # =================================================
+        # ПОЛУЧАЕМ MONEY TRANSFER
         # =================================================
 
         transfer = None
 
-        if receipt.transfer_id:
+        transfer_id = pending_expense.get(
+            "transfer_id"
+        )
+
+        if transfer_id:
 
             transfer = (
                 db.query(MoneyTransfer)
                 .filter(
                     MoneyTransfer.id
-                    == receipt.transfer_id
+                    == transfer_id
                 )
                 .first()
             )
 
         # =================================================
-        # Если выдача есть
+        # ПРОВЕРЯЕМ ОСТАТОК
         # =================================================
 
         if transfer:
@@ -1333,77 +1421,62 @@ async def create_transaction_from_receipt(
                 - already_spent
             )
 
+            if remaining < 0:
+                remaining = 0
+
             if amount > remaining + 0.01:
 
                 await update.message.reply_text(
-                    "⚠️ Сумма чека больше остатка "
+                    "⚠️ Расход не записан.\n\n"
+                    "Сумма чека превышает остаток "
                     "выданных денег.\n\n"
                     f"💳 Выдано: "
-                    f"{transfer.amount:,.2f} ₽\n"
-                    f"💸 Уже потрачено: "
+                    f"{float(transfer.amount):,.2f} ₽\n"
+                    f"💸 Уже подтверждено: "
                     f"{already_spent:,.2f} ₽\n"
                     f"💵 Остаток: "
                     f"{remaining:,.2f} ₽\n"
-                    f"🧾 Чек: "
+                    f"🧾 Сумма чека: "
                     f"{amount:,.2f} ₽\n\n"
-                    "Чек сохранён, но операция пока "
-                    "не создана."
+                    "Проверьте сумму или обратитесь "
+                    "к директору."
                 )
 
-                context.user_data[
-                    "waiting_receipt_amount"
-                ] = receipt.id
-
-                return
+                return False
 
         # =================================================
-        # ОПРЕДЕЛЯЕМ КАТЕГОРИЮ
+        # КАТЕГОРИЯ
         # =================================================
 
-        category_text = ""
-
-        if receipt.shop_name:
-            category_text += (
-                receipt.shop_name + " "
+        category = pending_expense.get(
+            "category"
+        ) or detect_category(
+            pending_expense.get(
+                "description",
+                ""
             )
-
-        if receipt.ocr_text:
-            category_text += (
-                receipt.ocr_text + " "
-            )
-
-        if transfer:
-
-            category_text += (
-                transfer.purpose or ""
-            )
-
-        category = detect_category(
-            category_text
         )
 
         # =================================================
         # ОПИСАНИЕ
         # =================================================
 
-        if receipt.shop_name:
+        description = pending_expense.get(
+            "description"
+        )
 
-            description = (
-                f"Чек: {receipt.shop_name}"
-            )
+        if not description:
 
-        elif transfer:
+            if receipt.shop_name:
 
-            description = (
-                f"Чек по выдаче: "
-                f"{transfer.purpose}"
-            )
+                description = (
+                    f"Покупка: "
+                    f"{receipt.shop_name}"
+                )
 
-        else:
+            else:
 
-            description = (
-                "Расход по чеку"
-            )
+                description = "Расход по чеку"
 
         # =================================================
         # TRANSACTION
@@ -1451,7 +1524,7 @@ async def create_transaction_from_receipt(
         )
 
         # =================================================
-        # СТАТУС ВЫДАЧИ
+        # MONEY TRANSFER
         # =================================================
 
         transfer_message = ""
@@ -1482,12 +1555,13 @@ async def create_transaction_from_receipt(
 
                 transfer_message = (
                     "\n\n"
-                    "💳 Выдача закрыта.\n"
-                    f"Выдано: "
-                    f"{transfer.amount:,.2f} ₽\n"
-                    f"Потрачено: "
+                    "💳 Выданные деньги полностью "
+                    "использованы.\n"
+                    f"💰 Выдано: "
+                    f"{float(transfer.amount):,.2f} ₽\n"
+                    f"💸 Потрачено: "
                     f"{spent_amount:,.2f} ₽\n"
-                    f"Остаток: "
+                    f"💵 Остаток: "
                     f"{remaining:,.2f} ₽"
                 )
 
@@ -1495,19 +1569,37 @@ async def create_transaction_from_receipt(
 
                 transfer_message = (
                     "\n\n"
-                    "💳 По выдаче:\n"
-                    f"Выдано: "
-                    f"{transfer.amount:,.2f} ₽\n"
-                    f"Потрачено: "
+                    "💳 По выданным деньгам:\n"
+                    f"💰 Выдано: "
+                    f"{float(transfer.amount):,.2f} ₽\n"
+                    f"💸 Потрачено: "
                     f"{spent_amount:,.2f} ₽\n"
-                    f"Остаток: "
+                    f"💵 Остаток: "
                     f"{remaining:,.2f} ₽"
                 )
 
+        # =================================================
+        # СОХРАНЯЕМ ВСЁ
+        # =================================================
+
         db.commit()
+
+        # =================================================
+        # ОЧИЩАЕМ СОСТОЯНИЕ
+        # =================================================
+
+        context.user_data.pop(
+            "pending_expense",
+            None
+        )
 
         context.user_data.pop(
             "waiting_receipt_amount",
+            None
+        )
+
+        context.user_data.pop(
+            "receipt_confirmation",
             None
         )
 
@@ -1530,7 +1622,7 @@ async def create_transaction_from_receipt(
         )
 
         await update.message.reply_text(
-            "✅ Чек обработан\n\n"
+            "✅ Расход подтверждён и записан!\n\n"
             f"👤 Сотрудник: "
             f"{user.full_name}\n"
             f"🏪 Магазин: "
@@ -1546,6 +1638,8 @@ async def create_transaction_from_receipt(
             f"{transfer_message}"
         )
 
+        return True
+
     except Exception as error:
 
         db.rollback()
@@ -1556,15 +1650,15 @@ async def create_transaction_from_receipt(
         )
 
         await update.message.reply_text(
-            "❌ Не удалось создать операцию "
-            "по чеку.\n\n"
+            "❌ Не удалось создать расход.\n\n"
             f"Ошибка: {error}"
         )
+
+        return False
 
     finally:
 
         db.close()
-
 
 # =========================================================
 # МОИ РАСХОДЫ
@@ -2887,7 +2981,102 @@ async def handle_employee_text(
         f"{category}\n"
         f"📝 {text}"
     )
+# =========================================================
+# ПОДТВЕРЖДЕНИЕ СУММЫ ЧЕКА
+# =========================================================
 
+async def handle_receipt_confirmation(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str
+):
+
+    confirmation = context.user_data.get(
+        "receipt_confirmation"
+    )
+
+    if not confirmation:
+        return False
+
+    answer = text.lower().strip()
+
+    yes_words = [
+        "да",
+        "верно",
+        "подтверждаю",
+        "правильно",
+        "подтвердить",
+        "подтверждаю сумму"
+    ]
+
+    no_words = [
+        "нет",
+        "неверно",
+        "неправильно",
+        "отмена",
+        "отменить"
+    ]
+
+    # =====================================================
+    # ДА
+    # =====================================================
+
+    if answer in yes_words:
+
+        receipt_id = (
+            confirmation["receipt_id"]
+        )
+
+        receipt_amount = (
+            confirmation["receipt_amount"]
+        )
+
+        result = await create_transaction_from_receipt(
+            update=update,
+            context=context,
+            receipt_id=receipt_id,
+            amount=receipt_amount,
+            force_confirmed=True
+        )
+
+        return True
+
+    # =====================================================
+    # НЕТ
+    # =====================================================
+
+    if answer in no_words:
+
+        context.user_data.pop(
+            "receipt_confirmation",
+            None
+        )
+
+        await update.message.reply_text(
+            "❌ Подтверждение отменено.\n\n"
+            "Расход пока НЕ записан.\n\n"
+            "🧾 Отправьте правильный чек.\n\n"
+            "После получения нового чека "
+            "я снова проверю сумму."
+        )
+
+        return True
+
+    # =====================================================
+    # НЕПОНЯТНЫЙ ОТВЕТ
+    # =====================================================
+
+    await update.message.reply_text(
+        "⚠️ Пожалуйста, ответьте:\n\n"
+        "✅ ДА — если сумма в чеке правильная.\n\n"
+        "❌ НЕТ — если чек ошибочный."
+    )
+
+    return True
+
+# =========================================================
+# ОБРАБОТКА СУММЫ НЕРАСПОЗНАННОГО ЧЕКА
+# =========================================================
 
 # =========================================================
 # ОБРАБОТКА СУММЫ НЕРАСПОЗНАННОГО ЧЕКА
@@ -2911,6 +3100,7 @@ async def handle_waiting_receipt_amount(
         .replace("₽", "")
         .replace("руб", "")
         .replace("р.", "")
+        .replace(" ", "")
         .replace(",", ".")
         .strip()
     )
@@ -2928,13 +3118,28 @@ async def handle_waiting_receipt_amount(
 
         await update.message.reply_text(
             "❌ Некорректная сумма.\n\n"
-            "Введите, например:\n"
+            "Введите сумму числом.\n\n"
+            "Например:\n"
             "3500\n"
             "или\n"
             "3500.50"
         )
 
         return True
+
+    # Убираем режим ожидания суммы.
+    # Если сумма отличается, функция создания
+    # установит режим подтверждения.
+    context.user_data.pop(
+        "waiting_receipt_amount",
+        None
+    )
+
+    await update.message.reply_text(
+        f"🔎 Сумма чека указана: "
+        f"{amount:,.2f} ₽\n\n"
+        "Проверяю её с указанным ранее расходом..."
+    )
 
     await create_transaction_from_receipt(
         update=update,
@@ -2944,7 +3149,6 @@ async def handle_waiting_receipt_amount(
     )
 
     return True
-
 
 # =========================================================
 # СОЗДАНИЕ ЗАЯВКИ / ТЕКСТОВЫЕ СООБЩЕНИЯ
@@ -3124,7 +3328,22 @@ async def handle_text(
         )
 
         return
+    # =====================================================
+    # ПОДТВЕРЖДЕНИЕ СУММЫ ЧЕКА
+    # =====================================================
 
+    if context.user_data.get(
+        "receipt_confirmation"
+    ):
+
+        handled = await handle_receipt_confirmation(
+            update,
+            context,
+            text
+        )
+
+        if handled:
+            return
     # =====================================================
     # ВВОД СУММЫ ПО ЧЕКУ
     # =====================================================
@@ -3212,17 +3431,42 @@ async def handle_text(
 
             return
 
-        # -------------------------------------------------
+         # -------------------------------------------------
         # ОТПРАВИТЬ ЧЕК
         # -------------------------------------------------
 
         if text == "🧾 Отправить чек":
 
+            pending_expense = context.user_data.get(
+                "pending_expense"
+            )
+
+            if not pending_expense:
+
+                await update.message.reply_text(
+                    "⚠️ Сейчас нет расхода, "
+                    "для которого нужен чек.\n\n"
+                    "Сначала напишите, что вы потратили "
+                    "и сколько.\n\n"
+                    "Например:\n"
+                    "Потратил 3500 на материалы\n\n"
+                    "После этого отправьте чек."
+                )
+
+                return
+
             await update.message.reply_text(
-                "🧾 Отправьте следующим сообщением:\n\n"
+                "🧾 Чек нужен для следующего расхода:\n\n"
+                f"💰 Сумма: "
+                f"{pending_expense['amount']:,.2f} ₽\n"
+                f"📂 Категория: "
+                f"{pending_expense['category']}\n"
+                f"📝 Описание: "
+                f"{pending_expense['description']}\n\n"
+                "Отправьте следующим сообщением:\n\n"
                 "📷 фотографию чека\n"
                 "или\n"
-                "📄 файл из банка — PDF, JPG, PNG и т.д."
+                "📄 файл чека."
             )
 
             return
@@ -3260,16 +3504,183 @@ async def handle_text(
             if handled:
                 return
 
-        # -------------------------------------------------
-        # ОБЫЧНЫЙ РАСХОД
-        # -------------------------------------------------
+        # =========================================================
+        # СОТРУДНИК — ОБЫЧНЫЙ РАСХОД
+        # =========================================================
+        # =========================================================
 
-        await handle_employee_text(
-            update,
-            text
+async def handle_employee_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str
+):
+
+    telegram_user = update.effective_user
+
+    if not telegram_user:
+        return
+
+    user = get_or_create_telegram_user(
+        telegram_user
+    )
+
+    if not user:
+        return
+
+    # =====================================================
+    # ЕСЛИ УЖЕ ЕСТЬ ОЖИДАЮЩИЙ РАСХОД
+    # =====================================================
+
+    existing_pending = context.user_data.get(
+        "pending_expense"
+    )
+
+    if existing_pending:
+
+        await update.message.reply_text(
+            "⚠️ У вас уже есть расход, "
+            "ожидающий чек.\n\n"
+            f"💰 Сумма: "
+            f"{existing_pending['amount']:,.2f} ₽\n"
+            f"📂 Категория: "
+            f"{existing_pending['category']}\n\n"
+            "🧾 Сначала отправьте чек "
+            "по этому расходу.\n\n"
+            "После его подтверждения "
+            "можно будет указать следующий расход."
         )
 
         return
+
+    # =====================================================
+    # СУММА
+    # =====================================================
+
+    amount = extract_amount(
+        text
+    )
+
+    if amount is None:
+
+        await update.message.reply_text(
+            "❌ Не смогла найти сумму.\n\n"
+            "Напиши, например:\n"
+            "Потратил 3500 на материалы"
+        )
+
+        return
+
+    # =====================================================
+    # АКТИВНАЯ ВЫДАЧА
+    # =====================================================
+
+    db = get_db()
+
+    try:
+
+        transfer = get_active_money_transfer(
+            db,
+            telegram_user.id
+        )
+
+        if not transfer:
+
+            await update.message.reply_text(
+                "⚠️ У вас нет активной выдачи денег "
+                "от директора.\n\n"
+                "Сначала директор должен выдать "
+                "вам деньги через Finance Bot.\n\n"
+                "После этого вы сможете указать "
+                "расход и прикрепить чек."
+            )
+
+            return
+
+        # =================================================
+        # ПРОВЕРЯЕМ ОСТАТОК
+        # =================================================
+
+        already_spent = (
+            get_transfer_spent_amount(
+                db,
+                transfer.id
+            )
+        )
+
+        remaining = (
+            float(transfer.amount)
+            - already_spent
+        )
+
+        if remaining < 0:
+            remaining = 0
+
+        if amount > remaining + 0.01:
+
+            await update.message.reply_text(
+                "⚠️ Расход превышает остаток "
+                "выданных денег.\n\n"
+                f"💳 Выдано: "
+                f"{float(transfer.amount):,.2f} ₽\n"
+                f"💸 Уже потрачено: "
+                f"{already_spent:,.2f} ₽\n"
+                f"💵 Остаток: "
+                f"{remaining:,.2f} ₽\n"
+                f"📝 Вы указали: "
+                f"{amount:,.2f} ₽\n\n"
+                "Проверьте сумму или обратитесь "
+                "к директору."
+            )
+
+            return
+
+        # =================================================
+        # КАТЕГОРИЯ
+        # =================================================
+
+        category = detect_category(
+            text
+        )
+
+        # =================================================
+        # СОХРАНЯЕМ ВРЕМЕННОЕ СОСТОЯНИЕ
+        # =================================================
+
+        context.user_data[
+            "pending_expense"
+        ] = {
+            "amount": float(amount),
+            "description": text,
+            "category": category,
+            "transfer_id": transfer.id
+        }
+
+        # =================================================
+        # ОТВЕТ СОТРУДНИКУ
+        # =================================================
+
+        await update.message.reply_text(
+            "📝 Расход получен, но пока не записан.\n\n"
+            f"💰 Сумма: "
+            f"{amount:,.2f} ₽\n"
+            f"📂 Категория: "
+            f"{category}\n"
+            f"📝 Описание: "
+            f"{text}\n\n"
+            "🧾 Теперь отправьте фотографию "
+            "или файл чека.\n\n"
+            "После получения чека я:\n"
+            "1️⃣ распознаю сумму;\n"
+            "2️⃣ сравню её с указанной суммой;\n"
+            "3️⃣ при необходимости попрошу подтвердить сумму;\n"
+            "4️⃣ только после этого запишу расход.\n\n"
+            "⚠️ Пока чек не подтверждён, "
+            "расход НЕ отображается в финансах."
+        )
+
+    finally:
+
+        db.close()
 
     # =====================================================
     # ДИРЕКТОР
