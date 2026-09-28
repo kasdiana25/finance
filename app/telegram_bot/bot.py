@@ -302,37 +302,6 @@ def director_keyboard():
 # ОСНОВНОЕ МЕНЮ
 # =========================================================
 
-def get_main_keyboard(user):
-
-    if user.role == "director":
-        return director_keyboard()
-
-    return employee_keyboard()
-
-
-async def show_main_menu(
-    update: Update,
-    user
-):
-
-    if user.role == "director":
-
-        text = (
-            "👑 Главное меню директора\n\n"
-            "Выберите нужный раздел:"
-        )
-
-    else:
-
-        text = (
-            "👤 Главное меню сотрудника\n\n"
-            "Выберите нужный раздел:"
-        )
-
-    await update.message.reply_text(
-        text,
-        reply_markup=get_main_keyboard(user)
-    )
 
 
 # =========================================================
@@ -632,11 +601,12 @@ def parse_receipt_date(value):
     if not value:
         return date.today()
 
+    if isinstance(value, datetime.datetime):
+        return value.date()
+
     if isinstance(value, date):
         return value
 
-    if isinstance(value, datetime.datetime):
-        return value.date()
 
     if isinstance(value, str):
 
@@ -1524,6 +1494,8 @@ async def create_transaction_from_receipt(
             amount
         )
 
+        db.flush()
+        
         # =================================================
         # MONEY TRANSFER
         # =================================================
@@ -2582,21 +2554,49 @@ async def handle_director_text(
     text: str
 ):
 
-    lower = text.lower()
+    lower = text.lower().strip()
+
+    # Нормализуем ё/е, чтобы:
+    # перевел = перевёл
+    # выдал = выдал
+    normalized = lower.replace("ё", "е")
 
     # =====================================================
     # ВЫДАЧА ДЕНЕГ СОТРУДНИКУ
     # =====================================================
 
-    is_transfer = (
-        "скинул" in lower
-        or "скинула" in lower
-        or "перевел" in lower
-        or "перевёл" in lower
-        or "выдал" in lower
-        or "выдала" in lower
-        or "перечислил" in lower
-        or "перечислила" in lower
+    transfer_words = [
+        "скинул",
+        "скинула",
+        "скинуть",
+
+        "перевел",
+        "перевела",
+        "перевести",
+
+        "выдал",
+        "выдала",
+        "выдать",
+
+        "дал",
+        "дала",
+        "дать",
+
+        "отправил",
+        "отправила",
+        "отправить",
+
+        "перечислил",
+        "перечислила",
+        "перечислить"
+    ]
+
+    is_transfer = any(
+        re.search(
+            rf"\b{re.escape(word)}\b",
+            normalized
+        )
+        for word in transfer_words
     )
 
     if is_transfer:
@@ -2610,7 +2610,9 @@ async def handle_director_text(
             await update.message.reply_text(
                 "❌ Не смогла определить сумму.\n\n"
                 "Напиши, например:\n"
-                "скинул Иванову 20000 на материалы"
+                "скинул Иванову 20000 на материалы\n\n"
+                "Или:\n"
+                "перевел Иванову 20000 на материалы"
             )
 
             return
@@ -2618,6 +2620,10 @@ async def handle_director_text(
         db = get_db()
 
         try:
+
+            # ---------------------------------------------
+            # ИЩЕМ СОТРУДНИКА
+            # ---------------------------------------------
 
             employee = find_employee_in_text(
                 db,
@@ -2628,36 +2634,73 @@ async def handle_director_text(
 
                 await update.message.reply_text(
                     "❌ Не смогла определить сотрудника.\n\n"
-                    "Напиши ФИО сотрудника, например:\n"
-                    "скинул Иванову Ивану 20000 "
+                    "Укажите ФИО сотрудника.\n\n"
+                    "Например:\n"
+                    "Перевел Иванову Ивану 20000 "
                     "на материалы"
                 )
 
                 return
 
+            # ---------------------------------------------
+            # ФОРМИРУЕМ НАЗНАЧЕНИЕ
+            # ---------------------------------------------
+
             purpose = text
 
-            phrases = [
-                "скинул",
-                "скинула",
-                "перевел",
-                "перевёл",
-                "выдал",
-                "выдала",
-                "перечислил",
-                "перечислила"
-            ]
-
-            for phrase in phrases:
+            for phrase in transfer_words:
 
                 purpose = re.sub(
-                    phrase,
+                    rf"\b{re.escape(phrase)}\b",
                     "",
                     purpose,
                     flags=re.IGNORECASE
                 )
 
-            purpose = purpose.strip()
+            # Убираем сумму из назначения
+            purpose = re.sub(
+                r"(?<!\d)"
+                r"\d{1,3}(?:[ \t]\d{3})+"
+                r"(?!\d)",
+                "",
+                purpose
+            )
+
+            purpose = re.sub(
+                r"(?<!\d)"
+                r"\d+(?:[.,]\d+)?"
+                r"(?!\d)",
+                "",
+                purpose
+            )
+
+            # Убираем обозначения валюты
+            purpose = re.sub(
+                r"\bруб(?:\.|лей|ля)?\b",
+                "",
+                purpose,
+                flags=re.IGNORECASE
+            )
+
+            purpose = purpose.replace(
+                "₽",
+                ""
+            )
+
+            # Убираем лишние пробелы
+            purpose = re.sub(
+                r"\s+",
+                " ",
+                purpose
+            ).strip()
+
+            # Если после очистки ничего нет
+            if not purpose:
+                purpose = "Выдача денежных средств"
+
+            # ---------------------------------------------
+            # СОЗДАЁМ MONEY TRANSFER
+            # ---------------------------------------------
 
             transfer = MoneyTransfer(
                 telegram_user_id=employee.id,
@@ -2718,9 +2761,9 @@ async def handle_director_text(
 
     is_income = (
         lower.startswith("+")
-        or "пришло" in lower
-        or "поступило" in lower
-        or "получили" in lower
+        or "пришло" in normalized
+        or "поступило" in normalized
+        or "получили" in normalized
     )
 
     if is_income:
@@ -2791,12 +2834,12 @@ async def handle_director_text(
 
     is_expense = (
         lower.startswith("-")
-        or "купил" in lower
-        or "купила" in lower
-        or "оплатил" in lower
-        or "оплатила" in lower
-        or "заплатил" in lower
-        or "заплатила" in lower
+        or "купил" in normalized
+        or "купила" in normalized
+        or "оплатил" in normalized
+        or "оплатила" in normalized
+        or "заплатил" in normalized
+        or "заплатила" in normalized
     )
 
     if is_expense:
@@ -2875,113 +2918,21 @@ async def handle_director_text(
         "Не поняла команду.\n\n"
         "Примеры:\n\n"
         "💳 Выдать деньги:\n"
-        "скинул Иванову 20000 на материалы\n\n"
+        "скинул Иванову 20000 на материалы\n"
+        "перевел Иванову 20000 на материалы\n"
+        "выдал Иванову 20000 на материалы\n"
+        "отправил Иванову 20000 на материалы\n\n"
         "💸 Купить напрямую:\n"
         "купил принтер 35000\n\n"
         "💰 Доход:\n"
         "пришло 500000 от клиента"
     )
 
-
 # =========================================================
 # СОТРУДНИК — ОБЫЧНЫЙ РАСХОД
 # =========================================================
 
-async def handle_employee_text(
-    update: Update,
-    text: str
-):
 
-    amount = extract_amount(
-        text
-    )
-
-    if amount is None:
-
-        await update.message.reply_text(
-            "❌ Не смогла найти сумму.\n\n"
-            "Напиши, например:\n"
-            "потратил 3500 на бензин"
-        )
-
-        return
-
-    telegram_user = update.effective_user
-
-    if not telegram_user:
-        return
-
-    user = get_or_create_telegram_user(
-        telegram_user
-    )
-
-    if not user:
-        return
-
-    category = detect_category(
-        text
-    )
-
-    db = get_db()
-
-    try:
-
-        transaction = Transaction(
-            type="expense",
-            category=category,
-            amount=amount,
-            description=text,
-            date=date.today()
-        )
-
-        db.add(
-            transaction
-        )
-
-        db.flush()
-
-        employee_expense = EmployeeExpense(
-            telegram_user_id=user.telegram_id,
-            transaction_id=transaction.id,
-            description=text
-        )
-
-        db.add(
-            employee_expense
-        )
-
-        db.commit()
-
-    except Exception as error:
-
-        db.rollback()
-
-        print(
-            "Ошибка записи расхода сотрудника:",
-            error
-        )
-
-        await update.message.reply_text(
-            "❌ Не удалось записать расход.\n\n"
-            f"Ошибка: {error}"
-        )
-
-        return
-
-    finally:
-
-        db.close()
-
-    await update.message.reply_text(
-        "✅ Расход записан\n\n"
-        f"👤 Сотрудник: "
-        f"{user.full_name}\n"
-        f"💰 Сумма: "
-        f"{amount:,.2f} ₽\n"
-        f"📂 Категория: "
-        f"{category}\n"
-        f"📝 {text}"
-    )
 # =========================================================
 # ПОДТВЕРЖДЕНИЕ СУММЫ ЧЕКА
 # =========================================================
@@ -3155,6 +3106,10 @@ async def handle_waiting_receipt_amount(
 # СОЗДАНИЕ ЗАЯВКИ / ТЕКСТОВЫЕ СООБЩЕНИЯ
 # =========================================================
 
+# =========================================================
+# ОСНОВНАЯ ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
+# =========================================================
+
 async def handle_text(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -3180,17 +3135,11 @@ async def handle_text(
     # РЕГИСТРАЦИЯ ФИО
     # =====================================================
 
-    if context.user_data.get(
-        "awaiting_full_name"
-    ):
+    if context.user_data.get("awaiting_full_name"):
 
-        full_name = normalize_full_name(
-            text
-        )
+        full_name = normalize_full_name(text)
 
-        if not is_valid_full_name(
-            full_name
-        ):
+        if not is_valid_full_name(full_name):
 
             await update.message.reply_text(
                 "❌ Пожалуйста, напишите ФИО полностью.\n\n"
@@ -3240,25 +3189,16 @@ async def handle_text(
                     is_active=True
                 )
 
-                db.add(
-                    user
-                )
-
+                db.add(user)
                 db.commit()
-
-                db.refresh(
-                    user
-                )
+                db.refresh(user)
 
             else:
 
                 user.full_name = full_name
 
                 db.commit()
-
-                db.refresh(
-                    user
-                )
+                db.refresh(user)
 
             context.user_data.pop(
                 "awaiting_full_name",
@@ -3329,6 +3269,7 @@ async def handle_text(
         )
 
         return
+
     # =====================================================
     # ПОДТВЕРЖДЕНИЕ СУММЫ ЧЕКА
     # =====================================================
@@ -3345,20 +3286,19 @@ async def handle_text(
 
         if handled:
             return
+
     # =====================================================
-    # ВВОД СУММЫ ПО ЧЕКУ
+    # ВВОД СУММЫ НЕРАСПОЗНАННОГО ЧЕКА
     # =====================================================
 
     if context.user_data.get(
         "waiting_receipt_amount"
     ):
 
-        handled = (
-            await handle_waiting_receipt_amount(
-                update,
-                context,
-                text
-            )
+        handled = await handle_waiting_receipt_amount(
+            update,
+            context,
+            text
         )
 
         if handled:
@@ -3432,7 +3372,7 @@ async def handle_text(
 
             return
 
-         # -------------------------------------------------
+        # -------------------------------------------------
         # ОТПРАВИТЬ ЧЕК
         # -------------------------------------------------
 
@@ -3493,21 +3433,19 @@ async def handle_text(
             "purchase_request"
         ):
 
-            handled = (
-                await handle_purchase_request_step(
-                    update,
-                    context,
-                    user,
-                    text
-                )
+            handled = await handle_purchase_request_step(
+                update,
+                context,
+                user,
+                text
             )
 
             if handled:
                 return
 
-        # =========================================================
-        # СОТРУДНИК — ОБЫЧНЫЙ РАСХОД
-        # =========================================================
+        # -------------------------------------------------
+        # ОБЫЧНЫЙ РАСХОД
+        # -------------------------------------------------
 
         await handle_employee_text(
             update,
@@ -3517,185 +3455,15 @@ async def handle_text(
 
         return
 
-
-async def handle_employee_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    text: str
-):
-
-    telegram_user = update.effective_user
-
-    if not telegram_user:
-        return
-
-    user = get_or_create_telegram_user(
-        telegram_user
-    )
-
-    if not user:
-        return
-
-    # =====================================================
-    # ЕСЛИ УЖЕ ЕСТЬ ОЖИДАЮЩИЙ РАСХОД
-    # =====================================================
-
-    existing_pending = context.user_data.get(
-        "pending_expense"
-    )
-
-    if existing_pending:
-
-        await update.message.reply_text(
-            "⚠️ У вас уже есть расход, "
-            "ожидающий чек.\n\n"
-            f"💰 Сумма: "
-            f"{existing_pending['amount']:,.2f} ₽\n"
-            f"📂 Категория: "
-            f"{existing_pending['category']}\n\n"
-            "🧾 Сначала отправьте чек "
-            "по этому расходу.\n\n"
-            "После его подтверждения "
-            "можно будет указать следующий расход."
-        )
-
-        return
-
-    # =====================================================
-    # СУММА
-    # =====================================================
-
-    amount = extract_amount(
-        text
-    )
-
-    if amount is None:
-
-        await update.message.reply_text(
-            "❌ Не смогла найти сумму.\n\n"
-            "Напиши, например:\n"
-            "Потратил 3500 на материалы"
-        )
-
-        return
-
-    # =====================================================
-    # АКТИВНАЯ ВЫДАЧА
-    # =====================================================
-
-    db = get_db()
-
-    try:
-
-        transfer = get_active_money_transfer(
-            db,
-            telegram_user.id
-        )
-
-        if not transfer:
-
-            await update.message.reply_text(
-                "⚠️ У вас нет активной выдачи денег "
-                "от директора.\n\n"
-                "Сначала директор должен выдать "
-                "вам деньги через Finance Bot.\n\n"
-                "После этого вы сможете указать "
-                "расход и прикрепить чек."
-            )
-
-            return
-
-        # =================================================
-        # ПРОВЕРЯЕМ ОСТАТОК
-        # =================================================
-
-        already_spent = (
-            get_transfer_spent_amount(
-                db,
-                transfer.id
-            )
-        )
-
-        remaining = (
-            float(transfer.amount)
-            - already_spent
-        )
-
-        if remaining < 0:
-            remaining = 0
-
-        if amount > remaining + 0.01:
-
-            await update.message.reply_text(
-                "⚠️ Расход превышает остаток "
-                "выданных денег.\n\n"
-                f"💳 Выдано: "
-                f"{float(transfer.amount):,.2f} ₽\n"
-                f"💸 Уже потрачено: "
-                f"{already_spent:,.2f} ₽\n"
-                f"💵 Остаток: "
-                f"{remaining:,.2f} ₽\n"
-                f"📝 Вы указали: "
-                f"{amount:,.2f} ₽\n\n"
-                "Проверьте сумму или обратитесь "
-                "к директору."
-            )
-
-            return
-
-        # =================================================
-        # КАТЕГОРИЯ
-        # =================================================
-
-        category = detect_category(
-            text
-        )
-
-        # =================================================
-        # СОХРАНЯЕМ ВРЕМЕННОЕ СОСТОЯНИЕ
-        # =================================================
-
-        context.user_data[
-            "pending_expense"
-        ] = {
-            "amount": float(amount),
-            "description": text,
-            "category": category,
-            "transfer_id": transfer.id
-        }
-
-        # =================================================
-        # ОТВЕТ СОТРУДНИКУ
-        # =================================================
-
-        await update.message.reply_text(
-            "📝 Расход получен, но пока не записан.\n\n"
-            f"💰 Сумма: "
-            f"{amount:,.2f} ₽\n"
-            f"📂 Категория: "
-            f"{category}\n"
-            f"📝 Описание: "
-            f"{text}\n\n"
-            "🧾 Теперь отправьте фотографию "
-            "или файл чека.\n\n"
-            "После получения чека я:\n"
-            "1️⃣ распознаю сумму;\n"
-            "2️⃣ сравню её с указанной суммой;\n"
-            "3️⃣ при необходимости попрошу подтвердить сумму;\n"
-            "4️⃣ только после этого запишу расход.\n\n"
-            "⚠️ Пока чек не подтверждён, "
-            "расход НЕ отображается в финансах."
-        )
-
-    finally:
-
-        db.close()
-
     # =====================================================
     # ДИРЕКТОР
     # =====================================================
 
     if user.role == "director":
+
+        # -------------------------------------------------
+        # ФИНАНСЫ
+        # -------------------------------------------------
 
         if text == "💰 Финансы":
 
@@ -3704,6 +3472,10 @@ async def handle_employee_text(
             )
 
             return
+
+        # -------------------------------------------------
+        # ЗАЯВКИ
+        # -------------------------------------------------
 
         if text == "📦 Заявки":
 
@@ -3824,7 +3596,7 @@ async def handle_employee_text(
             return
 
         # -------------------------------------------------
-        # ДРУГОЙ ТЕКСТ ДИРЕКТОРА
+        # ТЕКСТОВАЯ КОМАНДА ДИРЕКТОРА
         # -------------------------------------------------
 
         await handle_director_text(
@@ -3833,6 +3605,217 @@ async def handle_employee_text(
         )
 
 
+# =========================================================
+# КЛАВИАТУРА
+# =========================================================
+
+def get_main_keyboard(user):
+
+    if user.role == "director":
+        return director_keyboard()
+
+    return employee_keyboard()
+
+
+# =========================================================
+# ПОКАЗ ГЛАВНОГО МЕНЮ
+# =========================================================
+
+async def show_main_menu(
+    update: Update,
+    user
+):
+
+    if user.role == "director":
+
+        text = (
+            "👑 Главное меню директора\n\n"
+            "Выберите нужный раздел:"
+        )
+
+    else:
+
+        text = (
+            "👤 Главное меню сотрудника\n\n"
+            "Выберите нужный раздел:"
+        )
+
+    await update.message.reply_text(
+        text,
+        reply_markup=get_main_keyboard(user)
+    )
+
+
+# =========================================================
+# СОТРУДНИК — ОБЫЧНЫЙ РАСХОД
+# =========================================================
+
+async def handle_employee_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str
+):
+
+    telegram_user = update.effective_user
+
+    if not telegram_user:
+        return
+
+    user = get_or_create_telegram_user(
+        telegram_user
+    )
+
+    if not user:
+        return
+
+    # =====================================================
+    # ЕСЛИ УЖЕ ЕСТЬ ОЖИДАЮЩИЙ РАСХОД
+    # =====================================================
+
+    existing_pending = context.user_data.get(
+        "pending_expense"
+    )
+
+    if existing_pending:
+
+        await update.message.reply_text(
+            "⚠️ У вас уже есть расход, "
+            "ожидающий чек.\n\n"
+            f"💰 Сумма: "
+            f"{existing_pending['amount']:,.2f} ₽\n"
+            f"📂 Категория: "
+            f"{existing_pending['category']}\n\n"
+            "🧾 Сначала отправьте чек "
+            "по этому расходу.\n\n"
+            "После его подтверждения "
+            "можно будет указать следующий расход."
+        )
+
+        return
+
+    # =====================================================
+    # СУММА
+    # =====================================================
+
+    amount = extract_amount(text)
+
+    if amount is None:
+
+        await update.message.reply_text(
+            "❌ Не смогла найти сумму.\n\n"
+            "Напиши, например:\n"
+            "Потратил 3500 на материалы"
+        )
+
+        return
+
+    # =====================================================
+    # АКТИВНАЯ ВЫДАЧА
+    # =====================================================
+
+    db = get_db()
+
+    try:
+
+        transfer = get_active_money_transfer(
+            db,
+            telegram_user.id
+        )
+
+        if not transfer:
+
+            await update.message.reply_text(
+                "⚠️ У вас нет активной выдачи денег "
+                "от директора.\n\n"
+                "Сначала директор должен выдать "
+                "вам деньги через Finance Bot.\n\n"
+                "После этого вы сможете указать "
+                "расход и прикрепить чек."
+            )
+
+            return
+
+        # =================================================
+        # ПРОВЕРЯЕМ ОСТАТОК
+        # =================================================
+
+        already_spent = get_transfer_spent_amount(
+            db,
+            transfer.id
+        )
+
+        remaining = (
+            float(transfer.amount)
+            - already_spent
+        )
+
+        if remaining < 0:
+            remaining = 0
+
+        if amount > remaining + 0.01:
+
+            await update.message.reply_text(
+                "⚠️ Расход превышает остаток "
+                "выданных денег.\n\n"
+                f"💳 Выдано: "
+                f"{float(transfer.amount):,.2f} ₽\n"
+                f"💸 Уже потрачено: "
+                f"{already_spent:,.2f} ₽\n"
+                f"💵 Остаток: "
+                f"{remaining:,.2f} ₽\n"
+                f"📝 Вы указали: "
+                f"{amount:,.2f} ₽\n\n"
+                "Проверьте сумму или обратитесь "
+                "к директору."
+            )
+
+            return
+
+        # =================================================
+        # КАТЕГОРИЯ
+        # =================================================
+
+        category = detect_category(text)
+
+        # =================================================
+        # СОХРАНЯЕМ ВРЕМЕННОЕ СОСТОЯНИЕ
+        # =================================================
+
+        context.user_data[
+            "pending_expense"
+        ] = {
+            "amount": float(amount),
+            "description": text,
+            "category": category,
+            "transfer_id": transfer.id
+        }
+
+        # =================================================
+        # ОТВЕТ СОТРУДНИКУ
+        # =================================================
+
+        await update.message.reply_text(
+            "📝 Расход получен, но пока не записан.\n\n"
+            f"💰 Сумма: "
+            f"{amount:,.2f} ₽\n"
+            f"📂 Категория: "
+            f"{category}\n"
+            f"📝 Описание: "
+            f"{text}\n\n"
+            "🧾 Теперь отправьте фотографию "
+            "или файл чека.\n\n"
+            "После получения чека я:\n"
+            "1️⃣ распознаю сумму;\n"
+            "2️⃣ сравню её с указанной суммой;\n"
+            "3️⃣ при необходимости попрошу подтвердить сумму;\n"
+            "4️⃣ только после этого запишу расход.\n\n"
+            "⚠️ Пока чек не подтверждён, "
+            "расход НЕ отображается в финансах."
+        )
+
+    finally:
+
+        db.close()
 # =========================================================
 # СВОДКА
 # =========================================================
