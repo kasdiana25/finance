@@ -10,7 +10,8 @@ from fastapi import (
 
 from fastapi.responses import (
     HTMLResponse,
-    RedirectResponse
+    RedirectResponse,
+    FileResponse
 )
 
 from fastapi.templating import Jinja2Templates
@@ -994,7 +995,48 @@ def receipts_page(
         }
     )
 
+# =========================================================
+# ОТКРЫТЬ ФАЙЛ ЧЕКА
+# =========================================================
 
+@app.get("/receipts/file/{receipt_id}")
+def open_receipt_file(
+    receipt_id: int,
+    db: Session = Depends(get_db)
+):
+    receipt = (
+        db.query(models.Receipt)
+        .filter(models.Receipt.id == receipt_id)
+        .first()
+    )
+
+    if not receipt:
+        raise HTTPException(
+            status_code=404,
+            detail="Чек не найден"
+        )
+
+    path = (receipt.filepath or "").strip()
+
+    if not path or path in ("pending", "ожидается", ""):
+        raise HTTPException(
+            status_code=404,
+            detail="Файл чека ещё не загружен"
+        )
+
+    file_path = Path(path)
+
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Файл не найден на диске: {path}"
+        )
+
+    return FileResponse(
+        path=str(file_path),
+        filename=receipt.filename or file_path.name,
+        media_type="application/octet-stream",
+    )
 # =========================================================
 # HTML EMPLOYEES
 # =========================================================
