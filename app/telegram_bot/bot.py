@@ -247,6 +247,46 @@ def update_transfer_status(
 
 
 # =========================================================
+# БАЛАНС СОТРУДНИКА (сумма всех выдач минус подтверждённые расходы)
+# =========================================================
+
+def get_employee_balance(db, user_internal_id: int) -> float:
+    """
+    Общий баланс сотрудника:
+    все выдачи (issued / partially_spent / completed)
+    минус сумма подтверждённых чеков (с transaction_id).
+
+    Деньги не привязаны к одной покупке —
+    директор может выдать сумму «на месяц»,
+    сотрудник тратит частями и подтверждает чеками.
+    """
+    transfers = (
+        db.query(MoneyTransfer)
+        .filter(
+            MoneyTransfer.telegram_user_id == user_internal_id
+        )
+        .all()
+    )
+
+    total_issued = sum(
+        float(t.amount) for t in transfers
+    )
+
+    total_spent = 0.0
+    for transfer in transfers:
+        total_spent += get_transfer_spent_amount(
+            db,
+            transfer.id
+        )
+
+    balance = total_issued - total_spent
+    if balance < 0:
+        balance = 0.0
+
+    return balance
+
+
+# =========================================================
 # МЕНЮ СОТРУДНИКА
 # =========================================================
 
@@ -255,12 +295,16 @@ def employee_keyboard():
     return ReplyKeyboardMarkup(
         [
             [
-                KeyboardButton("💰 Мои расходы"),
-                KeyboardButton("📦 Создать запрос")
+                KeyboardButton("💸 Сообщить о расходе"),
+                KeyboardButton("🧾 Отправить чек")
             ],
             [
-                KeyboardButton("📋 Мои запросы"),
-                KeyboardButton("🧾 Отправить чек")
+                KeyboardButton("💰 Мои расходы"),
+                KeyboardButton("💳 Остаток денег")
+            ],
+            [
+                KeyboardButton("📦 Создать запрос"),
+                KeyboardButton("📋 Мои запросы")
             ],
             [
                 KeyboardButton("👤 Мой профиль")
@@ -279,15 +323,18 @@ def director_keyboard():
     return ReplyKeyboardMarkup(
         [
             [
-                KeyboardButton("💰 Финансы"),
-                KeyboardButton("📦 Заявки")
+                KeyboardButton("💳 Выдать деньги"),
+                KeyboardButton("💰 Финансы")
             ],
             [
-                KeyboardButton("🧾 Чеки"),
-                KeyboardButton("💳 Выданные деньги")
+                KeyboardButton("📦 Заявки"),
+                KeyboardButton("🧾 Чеки")
             ],
             [
-                KeyboardButton("📊 Отчёты"),
+                KeyboardButton("💳 Выданные деньги"),
+                KeyboardButton("📊 Отчёты")
+            ],
+            [
                 KeyboardButton("👤 Сотрудники")
             ],
             [
@@ -298,11 +345,314 @@ def director_keyboard():
     )
 
 
-# =========================================================
-# ОСНОВНОЕ МЕНЮ
-# =========================================================
 
 
+async def start_money_transfer(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    db = get_db()
+
+    try:
+        employees = (
+            db.query(TelegramUser)
+            .filter(
+                TelegramUser.role == "employee",
+                TelegramUser.is_active == True
+            )
+            .order_by(TelegramUser.full_name)
+            .all()
+        )
+
+        if not employees:
+            await update.message.reply_text(
+                "👤 Активных сотрудников нет.",
+                reply_markup=director_keyboard()
+            )
+            return
+
+        # Начинаем процесс выдачи денег
+        context.user_data["money_transfer"] = {
+            "step": "employee"
+        }
+
+        await update.message.reply_text(
+            "💳 Выдать деньги\n\n"
+            "Сначала выберите сотрудника:",
+            reply_markup=employee_selection_keyboard(employees)
+        )
+
+    finally:
+        db.close()
+
+
+
+
+def employee_selection_keyboard(employees):
+    buttons = []
+
+    for employee in employees:
+        buttons.append([
+            KeyboardButton(
+                f"👤 {employee.full_name}"
+            )
+        ])
+
+    buttons.append([
+        KeyboardButton("❌ Отмена")
+    ])
+
+    return ReplyKeyboardMarkup(
+        keyboard=buttons,
+        resize_keyboard=True
+    )
+
+
+async def handle_money_transfer_step(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str
+):
+    data = context.user_data.get("money_transfer")
+
+    if not data:
+        return False
+
+    # =====================================================
+    # ШАГ 1. ВЫБОР СОТРУДНИКА
+    # =====================================================
+
+    if data.get("step") == "employee":
+
+        if text == "❌ Отмена":
+            context.user_data.pop(
+                "money_transfer",
+                None
+            )
+
+            await update.message.reply_text(
+                "❌ Выдача денег отменена.",
+                reply_markup=director_keyboard()
+            )
+
+            return True
+
+        if not text.startswith("👤 "):
+            return True
+
+        employee_name = text[2:].strip()
+
+        db = get_db()
+
+        try:
+            employee = (
+                db.query(TelegramUser)
+                .filter(
+                    TelegramUser.full_name == employee_name,
+                    TelegramUser.role == "employee",
+                    TelegramUser.is_active == True
+                )
+                .first()
+            )
+
+            if not employee:
+                await update.message.reply_text(
+                    "❌ Сотрудник не найден."
+                )
+                return True
+
+            # Сохраняем выбранного сотрудника
+            data["employee_id"] = employee.id
+            data["employee_name"] = employee.full_name
+            data["employee_telegram_id"] = employee.telegram_id
+
+            # Переходим к вводу суммы
+            data["step"] = "amount"
+
+            # Получаем текущий баланс
+            balance = get_employee_balance(
+                db,
+                employee.id
+            )
+
+            await update.message.reply_text(
+                f"👤 Сотрудник: {employee.full_name}\n\n"
+                f"💰 Текущий баланс: "
+                f"{balance:,.2f} ₽\n\n"
+                "Введите сумму, которую нужно выдать:\n\n"
+                "Например:\n"
+                "50000",
+                reply_markup=ReplyKeyboardMarkup(
+                    [
+                        [
+                            KeyboardButton("❌ Отмена")
+                        ]
+                    ],
+                    resize_keyboard=True
+                )
+            )
+
+        finally:
+            db.close()
+
+        return True
+
+    # =====================================================
+    # ШАГ 2. ВВОД СУММЫ
+    # =====================================================
+
+    if data.get("step") == "amount":
+
+        if text == "❌ Отмена":
+
+            context.user_data.pop(
+                "money_transfer",
+                None
+            )
+
+            await update.message.reply_text(
+                "❌ Выдача денег отменена.",
+                reply_markup=director_keyboard()
+            )
+
+            return True
+
+        amount = extract_amount(text)
+
+        if amount is None or amount <= 0:
+
+            await update.message.reply_text(
+                "❌ Не удалось определить сумму.\n\n"
+                "Введите, например:\n"
+                "50000"
+            )
+
+            return True
+
+        db = get_db()
+
+        try:
+            employee = (
+                db.query(TelegramUser)
+                .filter(
+                    TelegramUser.id == data["employee_id"]
+                )
+                .first()
+            )
+
+            if not employee:
+
+                await update.message.reply_text(
+                    "❌ Сотрудник не найден."
+                )
+
+                return True
+
+            # =================================================
+            # СОЗДАЁМ НОВУЮ ВЫДАЧУ
+            # =================================================
+
+            transfer = MoneyTransfer(
+                telegram_user_id=employee.id,
+                amount=amount,
+
+                # Назначение теперь общее.
+                # Деньги НЕ привязаны к конкретной покупке.
+                purpose="Пополнение баланса",
+
+                comment="Выдача денежных средств сотруднику",
+
+                status="issued",
+
+                created_at=date.today()
+            )
+
+            db.add(transfer)
+            db.commit()
+            db.refresh(transfer)
+
+            # =================================================
+            # ПОЛУЧАЕМ НОВЫЙ БАЛАНС
+            # =================================================
+
+            balance = get_employee_balance(
+                db,
+                employee.id
+            )
+
+            # =================================================
+            # ОТВЕТ ДИРЕКТОРУ
+            # =================================================
+
+            await update.message.reply_text(
+                "✅ Деньги выданы\n\n"
+                f"👤 Сотрудник: {employee.full_name}\n"
+                f"💰 Выдано: {amount:,.2f} ₽\n"
+                f"💳 Баланс сотрудника: "
+                f"{balance:,.2f} ₽\n\n"
+                "Эта сумма добавлена к общему балансу "
+                "сотрудника и не привязана к конкретной покупке.",
+                reply_markup=director_keyboard()
+            )
+
+            # =================================================
+            # УВЕДОМЛЕНИЕ СОТРУДНИКУ
+            # =================================================
+
+            try:
+
+                await context.bot.send_message(
+                    chat_id=employee.telegram_id,
+                    text=(
+                        "💰 Вам выданы деньги\n\n"
+                        f"Сумма: {amount:,.2f} ₽\n"
+                        f"Ваш баланс: {balance:,.2f} ₽\n\n"
+                        "Эти деньги доступны для рабочих "
+                        "расходов.\n\n"
+                        "После покупки напишите:\n"
+                        "например:\n"
+                        "3500 канцтовары\n\n"
+                        "После этого я попрошу отправить чек."
+                    ),
+                    reply_markup=employee_keyboard()
+                )
+
+            except Exception as error:
+
+                print(
+                    "❌ Не удалось уведомить сотрудника:",
+                    error
+                )
+
+            # =================================================
+            # ОЧИЩАЕМ СОСТОЯНИЕ
+            # =================================================
+
+            context.user_data.pop(
+                "money_transfer",
+                None
+            )
+
+        except Exception as error:
+
+            db.rollback()
+
+            print(
+                "❌ Ошибка выдачи денег:",
+                error
+            )
+
+            await update.message.reply_text(
+                "❌ Не удалось выдать деньги.",
+                reply_markup=director_keyboard()
+            )
+
+        finally:
+            db.close()
+
+        return True
+
+    return False
 
 # =========================================================
 # ФИО
@@ -1495,7 +1845,7 @@ async def create_transaction_from_receipt(
         )
 
         db.flush()
-        
+
         # =================================================
         # MONEY TRANSFER
         # =================================================
@@ -1611,6 +1961,57 @@ async def create_transaction_from_receipt(
             f"{transfer_message}"
         )
 
+        # =================================================
+        # УВЕДОМЛЕНИЕ ДИРЕКТОРУ О РАСХОДЕ
+        # =================================================
+
+        if DIRECTOR_TELEGRAM_ID:
+
+            director_expense_text = (
+                "💸 НОВЫЙ РАСХОД СОТРУДНИКА\n\n"
+                f"👤 Сотрудник: "
+                f"{user.full_name}\n"
+                f"💰 Сумма: "
+                f"{amount:,.2f} ₽\n"
+                f"📂 Категория: "
+                f"{category}\n"
+                f"📝 Описание: "
+                f"{description}\n"
+                f"🏪 Магазин: "
+                f"{shop_text}\n"
+                f"📅 Дата: "
+                f"{date_text}\n"
+                f"🧾 Чек №{receipt.id}\n"
+                f"💸 Операция №{transaction.id}"
+            )
+
+            if transfer:
+
+                director_expense_text += (
+                    "\n\n"
+                    "💳 Выданные деньги:\n"
+                    f"Выдано: "
+                    f"{float(transfer.amount):,.2f} ₽\n"
+                    f"Потрачено: "
+                    f"{spent_amount:,.2f} ₽\n"
+                    f"Остаток: "
+                    f"{remaining:,.2f} ₽"
+                )
+
+            try:
+
+                await context.bot.send_message(
+                    chat_id=DIRECTOR_TELEGRAM_ID,
+                    text=director_expense_text
+                )
+
+            except Exception as error:
+
+                print(
+                    "Не удалось отправить "
+                    "уведомление директору о расходе:",
+                    error
+                )
         return True
 
     except Exception as error:
@@ -1799,15 +2200,20 @@ async def start_purchase_request(
     context.user_data[
         "purchase_request"
     ] = {
-        "step": "title",
+        "step": "product",
         "items": []
     }
 
     await update.message.reply_text(
         "📦 Создание заявки\n\n"
-        "Напишите, что необходимо купить.\n\n"
-        "Например:\n"
-        "Монитор для рабочего места"
+        "Напишите одним сообщением:\n"
+        "🛒 что нужно купить\n"
+        "🔢 количество\n"
+        "💰 цену за одну единицу\n\n"
+        "Пример:\n"
+        "Монитор Samsung 24, 2 шт, 25000 ₽\n\n"
+        "Или:\n"
+        "Стулья офисные, 5 шт, 8000 ₽"
     )
 
 
@@ -1821,217 +2227,126 @@ async def handle_purchase_request_step(
     user,
     text: str
 ):
-
-    data = context.user_data.get(
-        "purchase_request"
-    )
+    data = context.user_data.get("purchase_request")
 
     if not data:
         return False
 
-    step = data.get("step")
+    if data.get("step") != "product":
+        return False
 
-    if step == "title":
-
-        if not text.strip():
-
-            await update.message.reply_text(
-                "❌ Название заявки не может быть пустым."
-            )
-
-            return True
-
-        data["title"] = text.strip()
-        data["step"] = "description"
-
+    if not text.strip():
         await update.message.reply_text(
-            "📝 Напишите описание заявки.\n\n"
-            "Если описание не нужно, напишите:\n"
-            "нет"
-        )
-
-        return True
-
-    if step == "description":
-
-        if text.lower() == "нет":
-
-            data["description"] = None
-
-        else:
-
-            data["description"] = text
-
-        data["step"] = "product"
-
-        await update.message.reply_text(
-            "📦 Теперь укажите товар.\n\n"
+            "❌ Напишите, что нужно купить, количество и цену.\n\n"
             "Например:\n"
-            "Монитор Samsung 24"
+            "Монитор Samsung, 2 шт, 25000 ₽"
         )
-
         return True
 
-    if step == "product":
+    # Ищем количество, например: 2 шт.
+    quantity_match = re.search(
+        r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(?:шт\.?|штук|ед\.?)",
+        text,
+        flags=re.IGNORECASE
+    )
 
-        if not text.strip():
+    # Ищем цену в конце сообщения.
+    price_match = re.search(
+        r"(?<!\d)(\d+(?:[ \t]\d{3})*(?:[.,]\d{1,2})?)"
+        r"\s*(?:₽|руб(?:\.|лей|ля)?|р\.)?\s*$",
+        text,
+        flags=re.IGNORECASE
+    )
 
-            await update.message.reply_text(
-                "❌ Название товара не может быть пустым."
-            )
-
-            return True
-
-        data["product_name"] = text.strip()
-        data["step"] = "quantity"
-
+    if not quantity_match:
         await update.message.reply_text(
-            "🔢 Укажите количество.\n\n"
+            "❌ Не удалось определить количество.\n\n"
+            "Напишите в формате:\n"
+            "Монитор Samsung, 2 шт, 25000 ₽"
+        )
+        return True
+
+    quantity = float(
+        quantity_match.group(1).replace(",", ".")
+    )
+
+    if quantity <= 0:
+        await update.message.reply_text(
+            "❌ Количество должно быть больше нуля."
+        )
+        return True
+
+    if not price_match:
+        await update.message.reply_text(
+            "❌ Не удалось определить цену за одну единицу.\n\n"
             "Например:\n"
-            "2"
+            "Монитор Samsung, 2 шт, 25000 ₽"
         )
-
         return True
 
-    if step == "quantity":
+    estimated_price = float(
+        price_match.group(1)
+        .replace(" ", "")
+        .replace(",", ".")
+    )
 
-        try:
-
-            quantity = float(
-                text.replace(",", ".")
-            )
-
-            if quantity <= 0:
-                raise ValueError
-
-        except ValueError:
-
-            await update.message.reply_text(
-                "❌ Количество должно быть числом "
-                "больше нуля.\n\n"
-                "Например: 2"
-            )
-
-            return True
-
-        data["quantity"] = quantity
-        data["step"] = "price"
-
+    if estimated_price <= 0:
         await update.message.reply_text(
-            "💰 Укажите примерную цену "
-            "за одну единицу.\n\n"
-            "Если цена неизвестна, напишите:\n"
-            "нет"
+            "❌ Цена должна быть больше нуля."
         )
-
         return True
 
-    if step == "price":
+    # Удаляем из сообщения количество и цену,
+    # чтобы получить только название товара.
+    product_name = re.sub(
+        r",?\s*\d+(?:[.,]\d+)?\s*(?:шт\.?|штук|ед\.?)",
+        "",
+        text,
+        flags=re.IGNORECASE
+    )
 
-        if text.lower() == "нет":
+    product_name = re.sub(
+        r",?\s*\d+(?:[ \t]\d{3})*(?:[.,]\d{1,2})?"
+        r"\s*(?:₽|руб(?:\.|лей|ля)?|р\.)?\s*$",
+        "",
+        product_name,
+        flags=re.IGNORECASE
+    ).strip(" ,.-")
 
-            data["estimated_price"] = None
-
-        else:
-
-            try:
-
-                price = float(
-                    text.replace(",", ".")
-                )
-
-                if price < 0:
-                    raise ValueError
-
-                data["estimated_price"] = price
-
-            except ValueError:
-
-                await update.message.reply_text(
-                    "❌ Цена должна быть числом.\n\n"
-                    "Например: 25000\n"
-                    "или напишите: нет"
-                )
-
-                return True
-
-        data["step"] = "category"
-
+    if not product_name:
         await update.message.reply_text(
-            "📂 Укажите категорию.\n\n"
+            "❌ Не удалось определить название товара.\n\n"
             "Например:\n"
-            "Оборудование\n"
-            "Канцелярия\n"
-            "Материалы\n"
-            "Прочее"
+            "Монитор Samsung, 2 шт, 25000 ₽"
         )
-
         return True
 
-    if step == "category":
+    # Подготавливаем данные для сохранения.
+    data["product_name"] = product_name
+    data["title"] = product_name
+    data["description"] = None
+    data["quantity"] = quantity
+    data["estimated_price"] = estimated_price
 
-        if not text.strip():
+    # Внутренние значения для совместимости с существующей моделью.
+    # Пользователь категорию и приоритет не выбирает.
+    data["category"] = "Без категории"
+    data["priority"] = "normal"
 
-            await update.message.reply_text(
-                "❌ Укажите категорию."
-            )
+    total_price = quantity * estimated_price
 
-            return True
+    await update.message.reply_text(
+        "✅ Заявка принята!\n\n"
+        f"🛒 Товар: {product_name}\n"
+        f"🔢 Количество: {quantity:g} шт.\n"
+        f"💰 Цена за 1 шт.: {estimated_price:,.2f} ₽\n"
+        f"💵 Общая сумма: {total_price:,.2f} ₽\n\n"
+        "⏳ Сохраняю заявку..."
+    )
 
-        data["category"] = text.strip()
-        data["step"] = "priority"
+    await save_purchase_request(update, context, user)
 
-        await update.message.reply_text(
-            "⚡ Укажите приоритет:\n\n"
-            "1 — низкий\n"
-            "2 — обычный\n"
-            "3 — высокий\n"
-            "4 — срочный"
-        )
-
-        return True
-
-    if step == "priority":
-
-        priorities = {
-            "1": "low",
-            "2": "normal",
-            "3": "high",
-            "4": "urgent",
-            "низкий": "low",
-            "обычный": "normal",
-            "нормальный": "normal",
-            "высокий": "high",
-            "срочный": "urgent"
-        }
-
-        priority = priorities.get(
-            text.lower()
-        )
-
-        if priority is None:
-
-            await update.message.reply_text(
-                "❌ Выберите приоритет:\n\n"
-                "1 — низкий\n"
-                "2 — обычный\n"
-                "3 — высокий\n"
-                "4 — срочный"
-            )
-
-            return True
-
-        data["priority"] = priority
-
-        await save_purchase_request(
-            update,
-            context,
-            user
-        )
-
-        return True
-
-    return False
+    return True
 
 
 # =========================================================
@@ -2082,14 +2397,24 @@ async def save_purchase_request(
             f"З-{purchase_request.id:06d}"
         )
 
+        quantity = float(
+            data["quantity"]
+        )
+
+        estimated_price = float(
+            data["estimated_price"]
+        )
+
+        total_price = (
+            quantity * estimated_price
+        )
+
         item = PurchaseRequestItem(
             request_id=purchase_request.id,
             product_name=data["product_name"],
-            quantity=data["quantity"],
+            quantity=quantity,
             unit="шт.",
-            estimated_price=data.get(
-                "estimated_price"
-            )
+            estimated_price=estimated_price
         )
 
         db.add(item)
@@ -2107,48 +2432,39 @@ async def save_purchase_request(
             "urgent": "Срочный"
         }
 
+        # =================================================
+        # ОТВЕТ СОТРУДНИКУ
+        # =================================================
+
         await update.message.reply_text(
             "✅ Заявка создана!\n\n"
-            f"📌 Номер: "
-            f"{purchase_request.number}\n"
-            f"📦 {purchase_request.title}\n"
-            f"Товар: "
-            f"{data['product_name']}\n"
-            f"Количество: "
-            f"{data['quantity']}\n"
-            f"Категория: "
-            f"{data['category']}\n"
-            f"Приоритет: "
-            f"{priority_names.get(data['priority'], data['priority'])}\n\n"
+            f"📌 Номер: {purchase_request.number}\n"
+            f"🛒 Товар: {data['product_name']}\n"
+            f"🔢 Количество: {quantity:g} шт.\n"
+            f"💰 Цена за 1 шт.: {estimated_price:,.2f} ₽\n"
+            f"💵 Общая сумма: {total_price:,.2f} ₽\n\n"
             "Заявка отправлена директору."
         )
+
+        # =================================================
+        # УВЕДОМЛЕНИЕ ДИРЕКТОРУ
+        # =================================================
 
         if DIRECTOR_TELEGRAM_ID:
 
             notification_text = (
                 "📦 НОВАЯ ЗАЯВКА\n\n"
-                f"📌 Номер: "
-                f"{purchase_request.number}\n"
-                f"👤 Сотрудник: "
-                f"{user.full_name}\n"
-                f"📦 Заявка: "
-                f"{purchase_request.title}\n"
-                f"🛒 Товар: "
-                f"{data['product_name']}\n"
-                f"🔢 Количество: "
-                f"{data['quantity']}\n"
-                f"📂 Категория: "
-                f"{data['category']}\n"
-                f"⚡ Приоритет: "
-                f"{priority_names.get(data['priority'], data['priority'])}"
+                f"📌 Номер: {purchase_request.number}\n"
+                f"👤 Сотрудник: {user.full_name}\n"
+                f"🛒 Товар: {data['product_name']}\n"
+                f"🔢 Количество: {quantity:g} шт.\n"
+                f"💰 Цена за 1 шт.: {estimated_price:,.2f} ₽\n"
+                f"💵 Общая сумма: {total_price:,.2f} ₽"
             )
-
             try:
 
                 await context.bot.send_message(
-                    chat_id=(
-                        DIRECTOR_TELEGRAM_ID
-                    ),
+                    chat_id=DIRECTOR_TELEGRAM_ID,
                     text=notification_text
                 )
 
@@ -2182,7 +2498,6 @@ async def save_purchase_request(
             "purchase_request",
             None
         )
-
 
 # =========================================================
 # ЗАЯВКИ ДИРЕКТОРА
@@ -2431,7 +2746,8 @@ async def director_employees(
         if not employees:
 
             await update.message.reply_text(
-                "👤 Активных сотрудников нет."
+                "👤 Активных сотрудников нет.",
+                reply_markup=director_keyboard()
             )
 
             return
@@ -2441,15 +2757,22 @@ async def director_employees(
         ]
 
         for employee in employees:
-
+            balance = get_employee_balance(db, employee.id)
             lines.append(
                 f"• {employee.full_name}\n"
-                f"  Telegram ID: "
-                f"{employee.telegram_id}"
+                f"  ID: {employee.telegram_id}\n"
+                f"  💳 Баланс: {balance:,.2f} ₽"
             )
 
+        lines.append(
+            "\nЧтобы выдать деньги — нажмите "
+            "«💳 Выдать деньги» и выберите сотрудника "
+            "из списка кнопок."
+        )
+
         await update.message.reply_text(
-            "\n".join(lines)
+            "\n".join(lines),
+            reply_markup=director_keyboard()
         )
 
     finally:
@@ -3334,6 +3657,66 @@ async def handle_text(
     if user.role == "employee":
 
         # -------------------------------------------------
+        # СООБЩИТЬ О РАСХОДЕ (подсказка)
+        # -------------------------------------------------
+
+        if text == "💸 Сообщить о расходе":
+            await update.message.reply_text(
+                "💸 Сообщите о расходе одним сообщением.\n\n"
+                "Напишите сумму и на что потратили.\n\n"
+                "Примеры:\n"
+                "• Потратил 3500 на бензин\n"
+                "• 1200 канцтовары\n"
+                "• Оплатил такси 850\n\n"
+                "После этого отправьте фото или файл чека."
+            )
+            return
+
+        # -------------------------------------------------
+        # ОСТАТОК ДЕНЕГ
+        # -------------------------------------------------
+
+        if text == "💳 Остаток денег":
+            db = get_db()
+            try:
+                balance = get_employee_balance(db, user.id)
+                active = get_active_money_transfer(
+                    db, telegram_user.id
+                )
+
+                lines = [
+                    "💳 Ваш баланс\n",
+                    f"💰 Общий остаток: {balance:,.2f} ₽",
+                ]
+
+                if active:
+                    spent = get_transfer_spent_amount(
+                        db, active.id
+                    )
+                    remaining = float(active.amount) - spent
+                    if remaining < 0:
+                        remaining = 0
+                    lines.append(
+                        "\n📌 Текущая выдача:\n"
+                        f"Выдано: {float(active.amount):,.2f} ₽\n"
+                        f"Потрачено: {spent:,.2f} ₽\n"
+                        f"Остаток выдачи: {remaining:,.2f} ₽\n"
+                        f"Назначение: {active.purpose or '—'}"
+                    )
+                else:
+                    lines.append(
+                        "\nАктивных выдач с остатком нет."
+                    )
+
+                await update.message.reply_text(
+                    "\n".join(lines),
+                    reply_markup=employee_keyboard()
+                )
+            finally:
+                db.close()
+            return
+
+        # -------------------------------------------------
         # МОИ РАСХОДЫ
         # -------------------------------------------------
 
@@ -3460,6 +3843,27 @@ async def handle_text(
     # =====================================================
 
     if user.role == "director":
+
+        # -------------------------------------------------
+        # ШАГИ ВЫДАЧИ ДЕНЕГ (выбор сотрудника → сумма)
+        # -------------------------------------------------
+
+        if context.user_data.get("money_transfer"):
+            handled = await handle_money_transfer_step(
+                update,
+                context,
+                text
+            )
+            if handled:
+                return
+
+        # -------------------------------------------------
+        # КНОПКА: ВЫДАТЬ ДЕНЬГИ (выбор из списка сотрудников)
+        # -------------------------------------------------
+
+        if text == "💳 Выдать деньги":
+            await start_money_transfer(update, context)
+            return
 
         # -------------------------------------------------
         # ФИНАНСЫ
@@ -3647,7 +4051,7 @@ async def show_main_menu(
 
 
 # =========================================================
-# СОТРУДНИК — ОБЫЧНЫЙ РАСХОД
+# СОТРУДНИК — ОБЫЧНЫЙ РАСХОД (деньги с баланса / активной выдачи)
 # =========================================================
 
 async def handle_employee_text(
@@ -3655,166 +4059,114 @@ async def handle_employee_text(
     context: ContextTypes.DEFAULT_TYPE,
     text: str
 ):
-
+    """
+    Сотрудник пишет сумму и назначение (например: «Потратил 3500 на бензин»).
+    Деньги берутся с общего баланса (выданные директором суммы).
+    Transaction создаётся только после подтверждения чеком.
+    """
     telegram_user = update.effective_user
 
-    if not telegram_user:
+    if not telegram_user or not update.message:
         return
 
-    user = get_or_create_telegram_user(
-        telegram_user
-    )
+    user = get_or_create_telegram_user(telegram_user)
 
     if not user:
         return
 
-    # =====================================================
-    # ЕСЛИ УЖЕ ЕСТЬ ОЖИДАЮЩИЙ РАСХОД
-    # =====================================================
-
-    existing_pending = context.user_data.get(
-        "pending_expense"
-    )
-
-    if existing_pending:
-
-        await update.message.reply_text(
-            "⚠️ У вас уже есть расход, "
-            "ожидающий чек.\n\n"
-            f"💰 Сумма: "
-            f"{existing_pending['amount']:,.2f} ₽\n"
-            f"📂 Категория: "
-            f"{existing_pending['category']}\n\n"
-            "🧾 Сначала отправьте чек "
-            "по этому расходу.\n\n"
-            "После его подтверждения "
-            "можно будет указать следующий расход."
-        )
-
+    # Игнорируем нажатия кнопок меню (они обрабатываются выше)
+    menu_buttons = {
+        "💸 Сообщить о расходе",
+        "🧾 Отправить чек",
+        "💰 Мои расходы",
+        "💳 Остаток денег",
+        "📦 Создать запрос",
+        "📋 Мои запросы",
+        "👤 Мой профиль",
+        "🏠 Главное меню",
+    }
+    if text in menu_buttons:
         return
-
-    # =====================================================
-    # СУММА
-    # =====================================================
 
     amount = extract_amount(text)
 
-    if amount is None:
-
+    if amount is None or amount <= 0:
         await update.message.reply_text(
-            "❌ Не смогла найти сумму.\n\n"
-            "Напиши, например:\n"
-            "Потратил 3500 на материалы"
+            "❌ Не удалось определить сумму расхода.\n\n"
+            "Напишите, например:\n"
+            "Потратил 3500 на бензин\n\n"
+            "Или нажмите кнопку «💸 Сообщить о расходе»."
         )
-
         return
-
-    # =====================================================
-    # АКТИВНАЯ ВЫДАЧА
-    # =====================================================
 
     db = get_db()
 
     try:
+        current_balance = get_employee_balance(db, user.id)
 
-        transfer = get_active_money_transfer(
+        if amount > current_balance + 0.01:
+            await update.message.reply_text(
+                "❌ Недостаточно средств на балансе.\n\n"
+                f"💳 Баланс: {current_balance:,.2f} ₽\n"
+                f"💸 Расход: {amount:,.2f} ₽\n"
+                f"📉 Не хватает: "
+                f"{amount - current_balance:,.2f} ₽\n\n"
+                "Попросите директора пополнить баланс."
+            )
+            return
+
+        # Привязываем к активной выдаче (если есть),
+        # чтобы корректно уменьшался остаток по конкретной выдаче.
+        active_transfer = get_active_money_transfer(
             db,
             telegram_user.id
         )
-
-        if not transfer:
-
-            await update.message.reply_text(
-                "⚠️ У вас нет активной выдачи денег "
-                "от директора.\n\n"
-                "Сначала директор должен выдать "
-                "вам деньги через Finance Bot.\n\n"
-                "После этого вы сможете указать "
-                "расход и прикрепить чек."
-            )
-
-            return
-
-        # =================================================
-        # ПРОВЕРЯЕМ ОСТАТОК
-        # =================================================
-
-        already_spent = get_transfer_spent_amount(
-            db,
-            transfer.id
+        transfer_id = (
+            active_transfer.id if active_transfer else None
         )
-
-        remaining = (
-            float(transfer.amount)
-            - already_spent
-        )
-
-        if remaining < 0:
-            remaining = 0
-
-        if amount > remaining + 0.01:
-
-            await update.message.reply_text(
-                "⚠️ Расход превышает остаток "
-                "выданных денег.\n\n"
-                f"💳 Выдано: "
-                f"{float(transfer.amount):,.2f} ₽\n"
-                f"💸 Уже потрачено: "
-                f"{already_spent:,.2f} ₽\n"
-                f"💵 Остаток: "
-                f"{remaining:,.2f} ₽\n"
-                f"📝 Вы указали: "
-                f"{amount:,.2f} ₽\n\n"
-                "Проверьте сумму или обратитесь "
-                "к директору."
-            )
-
-            return
-
-        # =================================================
-        # КАТЕГОРИЯ
-        # =================================================
 
         category = detect_category(text)
 
-        # =================================================
-        # СОХРАНЯЕМ ВРЕМЕННОЕ СОСТОЯНИЕ
-        # =================================================
-
-        context.user_data[
-            "pending_expense"
-        ] = {
+        # Только ожидающий расход.
+        # Transaction пока НЕ создаём.
+        # Баланс пока НЕ уменьшаем — только после чека.
+        context.user_data["pending_expense"] = {
             "amount": float(amount),
             "description": text,
             "category": category,
-            "transfer_id": transfer.id
+            "transfer_id": transfer_id,
         }
 
-        # =================================================
-        # ОТВЕТ СОТРУДНИКУ
-        # =================================================
+        transfer_info = ""
+        if active_transfer:
+            spent = get_transfer_spent_amount(
+                db, active_transfer.id
+            )
+            remaining = float(active_transfer.amount) - spent
+            if remaining < 0:
+                remaining = 0
+            transfer_info = (
+                f"\n💳 По текущей выдаче:\n"
+                f"Выдано: {float(active_transfer.amount):,.2f} ₽\n"
+                f"Потрачено: {spent:,.2f} ₽\n"
+                f"Остаток выдачи: {remaining:,.2f} ₽"
+            )
 
         await update.message.reply_text(
-            "📝 Расход получен, но пока не записан.\n\n"
-            f"💰 Сумма: "
-            f"{amount:,.2f} ₽\n"
-            f"📂 Категория: "
-            f"{category}\n"
-            f"📝 Описание: "
-            f"{text}\n\n"
-            "🧾 Теперь отправьте фотографию "
-            "или файл чека.\n\n"
-            "После получения чека я:\n"
-            "1️⃣ распознаю сумму;\n"
-            "2️⃣ сравню её с указанной суммой;\n"
-            "3️⃣ при необходимости попрошу подтвердить сумму;\n"
-            "4️⃣ только после этого запишу расход.\n\n"
-            "⚠️ Пока чек не подтверждён, "
-            "расход НЕ отображается в финансах."
+            "📝 Расход ожидает подтверждения чеком.\n\n"
+            f"👤 Сотрудник: {user.full_name}\n"
+            f"💸 Заявленная сумма: {amount:,.2f} ₽\n"
+            f"📂 Категория: {category}\n"
+            f"📝 На что: {text}\n"
+            f"💳 Общий баланс: {current_balance:,.2f} ₽"
+            f"{transfer_info}\n\n"
+            "🧾 Теперь отправьте чек фотографией "
+            "(или файлом).\n"
+            "После подтверждения чека расход будет записан, "
+            "а сумма списана с баланса."
         )
 
     finally:
-
         db.close()
 # =========================================================
 # СВОДКА
