@@ -4120,37 +4120,53 @@ async def handle_expense_flow(
 
         await update.message.reply_text(
             f"📂 Категория: {category}\n\n"
-            "Введите сумму расхода:\n\n"
-            "Например:\n"
-            "3500\n"
-            "или\n"
-            "3500.50",
+            "Введите сумму — можно сразу с описанием:\n\n"
+            "150 на такси\n"
+            "или просто:\n"
+            "3500",
             reply_markup=expense_cancel_keyboard()
         )
         return True
 
-    # ---------- ШАГ 2: СУММА ----------
+    # ---------- ШАГ 2: СУММА (можно сразу «150 на такси») ----------
     if step == "amount":
         amount = extract_amount(text)
         if amount is None or amount <= 0:
             await update.message.reply_text(
                 "❌ Некорректная сумма.\n\n"
                 "Введите число, например:\n"
-                "3500",
+                "3500\n"
+                "или сразу:\n"
+                "150 на такси",
                 reply_markup=expense_cancel_keyboard()
             )
             return True
+
+        # Описание из того же сообщения: «150 на такси» → «на такси»
+        desc_from_amount = text
+        desc_from_amount = re.sub(
+            r"(?<!\d)\d+(?:[ \t]\d{3})*(?:[.,]\d{1,2})?",
+            " ",
+            desc_from_amount,
+        )
+        desc_from_amount = re.sub(
+            r"\b(руб(?:\.|лей|ля|ль)?|р\.?|₽)\b",
+            " ",
+            desc_from_amount,
+            flags=re.IGNORECASE,
+        )
+        desc_from_amount = re.sub(
+            r"\s+", " ", desc_from_amount
+        ).strip(" ,.-")
 
         db = get_db()
         try:
             balance = get_employee_balance(db, user.id)
             if amount > balance + 0.01:
                 await update.message.reply_text(
-                    "❌ Недостаточно средств на балансе.\n\n"
-                    f"💳 Баланс: {balance:,.2f} ₽\n"
-                    f"💸 Расход: {amount:,.2f} ₽\n\n"
-                    "Попросите директора пополнить баланс "
-                    "или введите меньшую сумму.",
+                    "❌ Недостаточно средств.\n\n"
+                    f"💳 Осталось: {balance:,.2f} ₽\n"
+                    f"💸 Нужно: {amount:,.2f} ₽",
                     reply_markup=expense_cancel_keyboard()
                 )
                 return True
@@ -4166,12 +4182,21 @@ async def handle_expense_flow(
             db.close()
 
         data["amount"] = float(amount)
-        data["step"] = "description"
 
+        # Если в сообщении уже есть «на что» — сразу записываем
+        if desc_from_amount:
+            data["description"] = desc_from_amount
+            await _finish_expense_flow(
+                update, context, user, data
+            )
+            return True
+
+        # Иначе спрашиваем описание отдельно
+        data["step"] = "description"
         await update.message.reply_text(
             f"💰 Сумма: {amount:,.2f} ₽\n\n"
             "Кратко напишите, на что потратили\n"
-            "(или нажмите «⏭ Без описания»):",
+            "(или «⏭ Без описания»):",
             reply_markup=expense_description_keyboard()
         )
         return True
@@ -4183,75 +4208,87 @@ async def handle_expense_flow(
         else:
             description = text.strip() or data["category"]
 
-        amount = data["amount"]
-        category = data["category"]
-        transfer_id = data.get("transfer_id")
-
-        db = get_db()
-        try:
-            transaction, receipt = record_employee_expense_now(
-                db=db,
-                telegram_user=update.effective_user,
-                user=user,
-                amount=amount,
-                category=category,
-                description=description,
-                transfer_id=transfer_id,
-            )
-            new_balance = get_employee_balance(db, user.id)
-        except Exception as error:
-            db.rollback()
-            print("Ошибка записи расхода:", error)
-            await update.message.reply_text(
-                "❌ Не удалось записать расход.",
-                reply_markup=employee_keyboard()
-            )
-            context.user_data.pop("expense_flow", None)
-            return True
-        finally:
-            db.close()
-
-        # Чек можно прислать позже — привяжем к уже созданному расходу
-        context.user_data["pending_expense"] = {
-            "amount": amount,
-            "description": description,
-            "category": category,
-            "transfer_id": transfer_id,
-            "transaction_id": transaction.id,
-            "receipt_id": receipt.id if receipt else None,
-        }
-        context.user_data.pop("expense_flow", None)
-
-        await update.message.reply_text(
-            f"✅ Расход записан, списано {amount:,.2f} ₽\n\n"
-            f"📂 {category}\n"
-            f"📝 {description}\n"
-            f"💳 Осталось: {new_balance:,.2f} ₽\n\n"
-            "📷 Желательно отправить фото чека "
-            "(для отчёта).",
-            reply_markup=employee_keyboard()
+        data["description"] = description
+        await _finish_expense_flow(
+            update, context, user, data
         )
-
-        # Уведомление директору
-        if DIRECTOR_TELEGRAM_ID:
-            try:
-                await context.bot.send_message(
-                    chat_id=DIRECTOR_TELEGRAM_ID,
-                    text=(
-                        "💸 РАСХОД СОТРУДНИКА\n\n"
-                        f"👤 {user.full_name}\n"
-                        f"💰 {amount:,.2f} ₽\n"
-                        f"📂 {category}\n"
-                        f"📝 {description}\n"
-                        f"💳 Остаток: {new_balance:,.2f} ₽"
-                    ),
-                )
-            except Exception as error:
-                print("Не удалось уведомить директора:", error)
-
         return True
 
     return False
+
+
+async def _finish_expense_flow(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user,
+    data: dict,
+):
+    """Записывает расход и отвечает пользователю."""
+    amount = data["amount"]
+    category = data["category"]
+    description = data.get("description") or category
+    transfer_id = data.get("transfer_id")
+
+    db = get_db()
+    try:
+        transaction, receipt = record_employee_expense_now(
+            db=db,
+            telegram_user=update.effective_user,
+            user=user,
+            amount=amount,
+            category=category,
+            description=description,
+            transfer_id=transfer_id,
+        )
+        new_balance = get_employee_balance(db, user.id)
+    except Exception as error:
+        db.rollback()
+        print("Ошибка записи расхода:", error)
+        await update.message.reply_text(
+            "❌ Не удалось записать расход.",
+            reply_markup=employee_keyboard()
+        )
+        context.user_data.pop("expense_flow", None)
+        return
+    finally:
+        db.close()
+
+    context.user_data["pending_expense"] = {
+        "amount": amount,
+        "description": description,
+        "category": category,
+        "transfer_id": transfer_id,
+        "transaction_id": transaction.id,
+        "receipt_id": receipt.id if receipt else None,
+    }
+    context.user_data.pop("expense_flow", None)
+
+    await update.message.reply_text(
+        "✅ Расход записан!\n\n"
+        f"💰 Списано: {amount:,.2f} ₽\n"
+        f"📂 Категория: {category}\n"
+        f"📝 На что: {description}\n"
+        f"💳 Осталось: {new_balance:,.2f} ₽\n\n"
+        "Операция уже есть на сайте.\n"
+        "📷 Можете прислать фото чека для отчёта.",
+        reply_markup=employee_keyboard()
+    )
+
+    if DIRECTOR_TELEGRAM_ID:
+        try:
+            await context.bot.send_message(
+                chat_id=DIRECTOR_TELEGRAM_ID,
+                text=(
+                    "💸 РАСХОД СОТРУДНИКА\n\n"
+                    f"👤 {user.full_name}\n"
+                    f"💰 {amount:,.2f} ₽\n"
+                    f"📂 {category}\n"
+                    f"📝 {description}\n"
+                    f"💳 Остаток: {new_balance:,.2f} ₽"
+                ),
+            )
+        except Exception as error:
+            print("Не удалось уведомить директора:", error)
 
 
 # =========================================================
@@ -4347,12 +4384,13 @@ async def handle_employee_text(
         }
 
         await update.message.reply_text(
-            f"✅ Расход записан, списано {amount:,.2f} ₽\n\n"
-            f"📂 {category}\n"
-            f"📝 {text}\n"
+            "✅ Расход записан!\n\n"
+            f"💰 Списано: {amount:,.2f} ₽\n"
+            f"📂 Категория: {category}\n"
+            f"📝 На что: {text}\n"
             f"💳 Осталось: {new_balance:,.2f} ₽\n\n"
-            "📷 Желательно отправить фото чека "
-            "(для отчёта).",
+            "Операция уже есть на сайте.\n"
+            "📷 Можете прислать фото чека для отчёта.",
             reply_markup=employee_keyboard()
         )
 
