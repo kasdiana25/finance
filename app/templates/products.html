@@ -367,6 +367,30 @@
 
             </div>
 
+            <!-- Количество отдельных экземпляров -->
+
+            <div class="product-form-field">
+
+                <label>
+                    Количество экземпляров
+                </label>
+
+                <input
+                    type="number"
+                    id="productQuantity"
+                    value="1"
+                    min="1"
+                    max="500"
+                    step="1"
+                    required
+                >
+
+                <small>
+                    Каждый экземпляр будет добавлен отдельно и получит собственный ID.
+                </small>
+
+            </div>
+
 
             <!-- Описание -->
 
@@ -865,6 +889,17 @@ document
             document.getElementById("productRoom").value.trim();
 
 
+        const quantityInput =
+            document.getElementById("productQuantity");
+
+        const quantity = Number.parseInt(quantityInput.value, 10);
+
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) {
+            alert("Укажите количество от 1 до 500.");
+            quantityInput.focus();
+            return;
+        }
+
         const data = {
 
             name:
@@ -889,33 +924,42 @@ document
 
         };
 
+        // Создаём отдельную запись для каждого экземпляра,
+        // чтобы у каждого товара был собственный ID.
+        for (let i = 0; i < quantity; i++) {
 
-        const response = await fetch(
-            "/api/products",
-            {
-                method: "POST",
+            const response = await fetch(
+                "/api/products",
+                {
+                    method: "POST",
 
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
 
-                body: JSON.stringify(data)
+                    body: JSON.stringify(data)
+                }
+            );
+
+            if (!response.ok) {
+
+                const errorText = await response.text();
+
+                console.error(
+                    `Ошибка при добавлении экземпляра ${i + 1} из ${quantity}:`,
+                    errorText
+                );
+
+                alert(
+                    `Не удалось добавить экземпляр ${i + 1} из ${quantity}. ` +
+                    `Уже успешно добавлено: ${i}. Обновите страницу и проверьте каталог.`
+                );
+
+                return;
+
             }
-        );
-
-
-        if (!response.ok) {
-
-            const errorText = await response.text();
-
-            console.error(errorText);
-
-            alert("Не удалось добавить товар");
-
-            return;
 
         }
-
 
         location.reload();
 
