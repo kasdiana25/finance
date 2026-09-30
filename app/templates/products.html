@@ -112,9 +112,10 @@
 
         {% if products %}
 
-            <div class="products-grid">
+            <div class="products-grid" style="max-height: 65vh; overflow-y: auto; overflow-x: hidden; padding-right: 8px; align-content: start;">
 
-                {% for product in products %}
+                {% for product_name, product_group in products|groupby("name") %}
+                    {% set product = product_group[0] %}
 
                     <div class="product-card">
 
@@ -154,6 +155,10 @@
                                 {{ product.name }}
                             </h3>
 
+                            <div class="product-category">
+                                Количество: {{ product_group|length }} шт.
+                            </div>
+
 
                             {% if product.category %}
 
@@ -187,8 +192,12 @@
                                 </div>
 
                                 <div>
-                                    <span>ID</span>
-                                    <strong>#{{ product.id }}</strong>
+                                    <span>ID экземпляров</span>
+                                    <strong>
+                                        {% for item in product_group %}
+                                            #{{ item.id }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                    </strong>
                                 </div>
 
                             </div>
