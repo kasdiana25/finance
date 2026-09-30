@@ -1018,7 +1018,7 @@ def open_receipt_file(
 
     path = (receipt.filepath or "").strip()
 
-    if not path or path in ("pending", "ожидается", ""):
+    if not path or path.lower() in ("pending", "ожидается", "none", "null", ""):
         raise HTTPException(
             status_code=404,
             detail="Файл чека ещё не загружен"
@@ -1026,16 +1026,41 @@ def open_receipt_file(
 
     file_path = Path(path)
 
+    # Если путь относительный — ищем файл в разных местах
+    if not file_path.is_absolute():
+        candidates = [
+            BASE_DIR / path,
+            BASE_DIR / "uploads" / path,
+            BASE_DIR / "static" / "receipts" / path,
+            Path.cwd() / path,
+            Path.cwd() / "uploads" / path,
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                file_path = candidate
+                break
+
     if not file_path.is_file():
         raise HTTPException(
             status_code=404,
-            detail=f"Файл не найден на диске: {path}"
+            detail=f"Файл не найден на диске. Путь в БД: {path}"
         )
+
+    # Правильный тип файла, чтобы браузер мог открыть
+    suffix = file_path.suffix.lower()
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".pdf": "application/pdf",
+        ".webp": "image/webp",
+    }
+    media_type = media_types.get(suffix, "application/octet-stream")
 
     return FileResponse(
         path=str(file_path),
         filename=receipt.filename or file_path.name,
-        media_type="application/octet-stream",
+        media_type=media_type,
     )
 # =========================================================
 # HTML EMPLOYEES
