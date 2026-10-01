@@ -21,7 +21,7 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-
+from telegram.request import HTTPXRequest
 from ..database import SessionLocal
 
 from ..models import (
@@ -46,6 +46,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 DIRECTOR_TELEGRAM_ID = os.getenv("DIRECTOR_TELEGRAM_ID")
+TELEGRAM_PROXY = os.getenv("TELEGRAM_PROXY")
 
 if not BOT_TOKEN:
     raise RuntimeError(
@@ -4600,9 +4601,18 @@ async def check_subscription_notifications(
 
 def main():
 
+    request = HTTPXRequest(
+        proxy=TELEGRAM_PROXY,
+        connect_timeout=30,
+        read_timeout=30,
+        write_timeout=30,
+        pool_timeout=30,
+    )
+
     application = (
         ApplicationBuilder()
         .token(BOT_TOKEN)
+        .request(request)
         .build()
     )
 
