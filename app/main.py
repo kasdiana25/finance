@@ -1231,29 +1231,30 @@ def reports_page(
 
 
 def register_pdf_fonts():
-    """
-    Подключаем Arial, чтобы русский текст нормально отображался в PDF.
-    """
+    regular = Path(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    )
 
-    regular = Path("C:/Windows/Fonts/arial.ttf")
-    bold = Path("C:/Windows/Fonts/arialbd.ttf")
+    bold = Path(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    )
 
     if not regular.exists():
         raise FileNotFoundError(
-            "Не найден шрифт Arial: C:/Windows/Fonts/arial.ttf"
+            f"Не найден шрифт DejaVuSans: {regular}"
         )
 
     pdfmetrics.registerFont(
-        TTFont("Arial", str(regular))
+        TTFont("DejaVuSans", str(regular))
     )
 
     if bold.exists():
         pdfmetrics.registerFont(
-            TTFont("Arial-Bold", str(bold))
+            TTFont("DejaVuSans-Bold", str(bold))
         )
     else:
         pdfmetrics.registerFont(
-            TTFont("Arial-Bold", str(regular))
+            TTFont("DejaVuSans-Bold", str(regular))
         )
 
 
