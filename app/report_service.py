@@ -185,15 +185,19 @@ def get_financial_report(
 
     for receipt in receipts:
 
-        created_at = receipt.created_at
+        # У Receipt нет created_at.
+        # Используем дату чека, а если её нет —
+        # дату загрузки.
+        receipt_date = (
+            receipt.receipt_date
+            or receipt.uploaded_at
+        )
 
-        if not created_at:
+        if not receipt_date:
             continue
 
-        if isinstance(created_at, datetime):
-            receipt_date = created_at.date()
-        else:
-            receipt_date = created_at
+        if isinstance(receipt_date, datetime):
+            receipt_date = receipt_date.date()
 
         if start_date <= receipt_date <= end_date:
             period_receipts.append(receipt)
@@ -209,10 +213,10 @@ def get_financial_report(
 
     period_purchase_requests = []
 
-    purchase_total = 0
-
     for request in purchase_requests:
 
+        # У PurchaseRequest дата создания хранится
+        # в поле created_at.
         created_at = request.created_at
 
         if not created_at:
@@ -224,7 +228,6 @@ def get_financial_report(
             request_date = created_at
 
         if start_date <= request_date <= end_date:
-
             period_purchase_requests.append(request)
 
     # -----------------------------------------------------
