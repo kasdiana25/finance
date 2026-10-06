@@ -5,113 +5,250 @@
 {% block content %}
 
 <div class="dashboard-header">
-
     <div>
         <h1>Отчёты</h1>
+        <p>Финансовая аналитика и сводная информация</p>
+    </div>
+</div>
 
-        <p>
-            Финансовая аналитика и сводная информация
-        </p>
+
+<!-- ВЫБОР ПЕРИОДА -->
+
+<div class="panel">
+    <div class="panel-header">
+        <div>
+            <h2>Период отчёта</h2>
+            <p class="panel-description">
+                Выберите период, за который необходимо сформировать отчёт
+            </p>
+        </div>
+    </div>
+
+    <form method="get" action="/reports">
+
+        <label for="period">Период</label>
+
+        <select
+            id="period"
+            name="period"
+            onchange="toggleCustomDates()"
+        >
+            <option value="today"
+                {% if report.period == "today" %}selected{% endif %}>
+                Сегодня
+            </option>
+
+            <option value="yesterday"
+                {% if report.period == "yesterday" %}selected{% endif %}>
+                Вчера
+            </option>
+
+            <option value="week"
+                {% if report.period == "week" %}selected{% endif %}>
+                Эта неделя
+            </option>
+
+            <option value="last_week"
+                {% if report.period == "last_week" %}selected{% endif %}>
+                Прошлая неделя
+            </option>
+
+            <option value="month"
+                {% if report.period == "month" %}selected{% endif %}>
+                Этот месяц
+            </option>
+
+            <option value="last_month"
+                {% if report.period == "last_month" %}selected{% endif %}>
+                Прошлый месяц
+            </option>
+
+            <option value="year"
+                {% if report.period == "year" %}selected{% endif %}>
+                Этот год
+            </option>
+
+            <option value="custom"
+                {% if report.period == "custom" %}selected{% endif %}>
+                Произвольный период
+            </option>
+        </select>
+
+
+        <div id="custom-dates" hidden>
+
+            <label for="date_from">С</label>
+
+            <input
+                type="date"
+                id="date_from"
+                name="date_from"
+                value="{% if report.date_from %}{{ report.date_from.strftime('%Y-%m-%d') }}{% endif %}"
+            >
+
+            <label for="date_to">По</label>
+
+            <input
+                type="date"
+                id="date_to"
+                name="date_to"
+                value="{% if report.date_to %}{{ report.date_to.strftime('%Y-%m-%d') }}{% endif %}"
+            >
+
+        </div>
+
+
+        <button type="submit" class="main-button">
+            Сформировать отчёт
+        </button>
+
+    </form>
+
+
+    <p>
+        <strong>Отчёт за период:</strong>
+
+        {{ report.date_from.strftime('%d.%m.%Y') }}
+        —
+        {{ report.date_to.strftime('%d.%m.%Y') }}
+    </p>
+
+
+    <!-- КНОПКА PDF -->
+
+    <form method="get" action="/reports/pdf">
+
+        <input
+            type="hidden"
+            name="period"
+            value="{{ report.period }}"
+        >
+
+        {% if report.period == "custom" %}
+
+        <input
+            type="hidden"
+            name="date_from"
+            value="{{ report.date_from.strftime('%Y-%m-%d') }}"
+        >
+
+        <input
+            type="hidden"
+            name="date_to"
+            value="{{ report.date_to.strftime('%Y-%m-%d') }}"
+        >
+
+        {% endif %}
+
+        <button type="submit" class="main-button">
+            Скачать PDF
+        </button>
+
+    </form>
+
+</div>
+
+
+<!-- ФИНАНСОВЫЕ ПОКАЗАТЕЛИ -->
+
+<div class="dashboard-cards">
+
+    <div class="finance-card income">
+        <div class="icon">↑</div>
+
+        <div>
+            <h3>Доходы за период</h3>
+
+            <p>
+                {{ "%.2f"|format(report.income) }} ₽
+            </p>
+        </div>
+    </div>
+
+
+    <div class="finance-card expense">
+        <div class="icon">↓</div>
+
+        <div>
+            <h3>Расходы за период</h3>
+
+            <p>
+                {{ "%.2f"|format(report.expense) }} ₽
+            </p>
+        </div>
+    </div>
+
+
+    <div class="finance-card balance">
+        <div class="icon">₽</div>
+
+        <div>
+            <h3>Чистый результат</h3>
+
+            <p>
+                {{ "%.2f"|format(report.balance) }} ₽
+            </p>
+        </div>
     </div>
 
 </div>
 
 
-<!-- =====================================================
-     ФИНАНСОВЫЕ ПОКАЗАТЕЛИ
-===================================================== -->
-
-<div class="stats-grid">
-
-
-    <div class="stat-card">
-
-        <div class="stat-card-icon income">
-            ↑
-        </div>
-
-        <div>
-
-            <span class="stat-card-label">
-                Общий доход
-            </span>
-
-            <strong class="stat-card-value income-text">
-                {{ "%.2f"|format(statistics.total_income) }} ₽
-            </strong>
-
-        </div>
-
-    </div>
-
-
-
-    <div class="stat-card">
-
-        <div class="stat-card-icon expense">
-            ↓
-        </div>
-
-        <div>
-
-            <span class="stat-card-label">
-                Общий расход
-            </span>
-
-            <strong class="stat-card-value expense-text">
-                {{ "%.2f"|format(statistics.total_expense) }} ₽
-            </strong>
-
-        </div>
-
-    </div>
-
-
-
-    <div class="stat-card">
-
-        <div class="stat-card-icon balance">
-            ₽
-        </div>
-
-        <div>
-
-            <span class="stat-card-label">
-                Баланс
-            </span>
-
-            <strong class="stat-card-value">
-                {{ "%.2f"|format(statistics.balance) }} ₽
-            </strong>
-
-        </div>
-
-    </div>
-
-
-</div>
-
-
-<!-- =====================================================
-     РАСХОДЫ ПО КАТЕГОРИЯМ
-===================================================== -->
+<!-- КРАТКАЯ СТАТИСТИКА -->
 
 <div class="panel">
 
     <div class="panel-header">
-
         <div>
+            <h2>Краткая статистика</h2>
+        </div>
+    </div>
 
-            <h2>
-                Расходы по категориям
-            </h2>
+    <table>
+
+        <tbody>
+
+            <tr>
+                <td><strong>Количество операций</strong></td>
+                <td>{{ report.transaction_count }}</td>
+            </tr>
+
+            <tr>
+                <td><strong>Выдано сотрудникам</strong></td>
+                <td>
+                    {{ "%.2f"|format(report.transfer_total) }} ₽
+                </td>
+            </tr>
+
+            <tr>
+                <td><strong>Количество чеков</strong></td>
+                <td>{{ report.receipt_count }}</td>
+            </tr>
+
+            <tr>
+                <td><strong>Заявки на закупку</strong></td>
+                <td>{{ report.purchase_request_count }}</td>
+            </tr>
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+<!-- РАСХОДЫ ПО КАТЕГОРИЯМ -->
+
+<div class="panel">
+
+    <div class="panel-header">
+        <div>
+            <h2>Расходы по категориям</h2>
 
             <p class="panel-description">
-                Распределение всех расходов
+                Распределение расходов за выбранный период
             </p>
-
         </div>
-
     </div>
 
 
@@ -122,19 +259,9 @@
             <thead>
 
                 <tr>
-
-                    <th>
-                        Категория
-                    </th>
-
-                    <th>
-                        Сумма
-                    </th>
-
-                    <th>
-                        Доля
-                    </th>
-
+                    <th>Категория</th>
+                    <th>Сумма</th>
+                    <th>Доля</th>
                 </tr>
 
             </thead>
@@ -142,56 +269,57 @@
 
             <tbody>
 
-                {% for item in statistics.expenses_by_category %}
+                {% set categories = {} %}
+
+                {% for transaction in report.transactions %}
+
+                    {% if transaction.type == "expense" %}
+
+                        {% if transaction.category in categories %}
+
+                            {% set _ = categories.update({
+                                transaction.category:
+                                categories[transaction.category] +
+                                transaction.amount
+                            }) %}
+
+                        {% else %}
+
+                            {% set _ = categories.update({
+                                transaction.category:
+                                transaction.amount
+                            }) %}
+
+                        {% endif %}
+
+                    {% endif %}
+
+                {% endfor %}
+
+
+                {% for category, amount in categories.items() %}
 
                 <tr>
 
                     <td>
-                        <strong>
-                            {{ item.category }}
-                        </strong>
+                        <strong>{{ category }}</strong>
                     </td>
 
+                    <td>
+                        {{ "%.2f"|format(amount) }} ₽
+                    </td>
 
                     <td>
 
-                        <span class="expense-text">
-                            {{ "%.2f"|format(item.amount) }} ₽
-                        </span>
+                        {% if report.expense > 0 %}
 
-                    </td>
-
-
-                    <td>
-
-                        {% if statistics.total_expense > 0 %}
-
-                        {% set percentage =
-                            item.amount /
-                            statistics.total_expense *
-                            100
-                        %}
-
-                        <div class="progress-wrapper">
-
-                            <div class="progress">
-
-                                <div
-                                    class="progress-bar"
-                                    style="width: {{ percentage }}%;"
-                                ></div>
-
-                            </div>
-
-                            <span>
-                                {{ "%.1f"|format(percentage) }}%
-                            </span>
-
-                        </div>
+                            {{ "%.1f"|format(
+                                amount / report.expense * 100
+                            ) }}%
 
                         {% else %}
 
-                        —
+                            —
 
                         {% endif %}
 
@@ -203,28 +331,8 @@
 
                 <tr>
 
-                    <td
-                        colspan="3"
-                        class="empty-table"
-                    >
-
-                        <div class="empty-table-content">
-
-                            <div class="empty-table-icon">
-                                📊
-                            </div>
-
-                            <h3>
-                                Данных пока нет
-                            </h3>
-
-                            <p>
-                                Добавьте операции,
-                                чтобы увидеть аналитику.
-                            </p>
-
-                        </div>
-
+                    <td colspan="3">
+                        За выбранный период расходов нет.
                     </td>
 
                 </tr>
@@ -240,32 +348,19 @@
 </div>
 
 
-<!-- =====================================================
-     ПОСЛЕДНИЕ ОПЕРАЦИИ
-===================================================== -->
+<!-- ОПЕРАЦИИ -->
 
 <div class="panel">
 
     <div class="panel-header">
 
         <div>
-
-            <h2>
-                Последние операции
-            </h2>
+            <h2>Операции за период</h2>
 
             <p class="panel-description">
-                Финансовые операции в системе
+                Все финансовые операции за выбранный период
             </p>
-
         </div>
-
-        <a
-            href="/transactions-page"
-            class="panel-link"
-        >
-            Все операции →
-        </a>
 
     </div>
 
@@ -277,27 +372,11 @@
             <thead>
 
                 <tr>
-
-                    <th>
-                        Дата
-                    </th>
-
-                    <th>
-                        Тип
-                    </th>
-
-                    <th>
-                        Категория
-                    </th>
-
-                    <th>
-                        Сумма
-                    </th>
-
-                    <th>
-                        Описание
-                    </th>
-
+                    <th>Дата</th>
+                    <th>Тип</th>
+                    <th>Категория</th>
+                    <th>Сумма</th>
+                    <th>Описание</th>
                 </tr>
 
             </thead>
@@ -305,7 +384,7 @@
 
             <tbody>
 
-                {% for transaction in transactions[:10] %}
+                {% for transaction in report.transactions %}
 
                 <tr>
 
@@ -318,15 +397,15 @@
 
                         {% if transaction.type == "income" %}
 
-                        <span class="badge income-badge">
-                            Доход
-                        </span>
+                            <span class="badge income-badge">
+                                Доход
+                            </span>
 
                         {% else %}
 
-                        <span class="badge expense-badge">
-                            Расход
-                        </span>
+                            <span class="badge expense-badge">
+                                Расход
+                            </span>
 
                         {% endif %}
 
@@ -342,15 +421,15 @@
 
                         {% if transaction.type == "income" %}
 
-                        <span class="income-text">
-                            +{{ "%.2f"|format(transaction.amount) }} ₽
-                        </span>
+                            <span class="income-amount">
+                                +{{ "%.2f"|format(transaction.amount) }} ₽
+                            </span>
 
                         {% else %}
 
-                        <span class="expense-text">
-                            -{{ "%.2f"|format(transaction.amount) }} ₽
-                        </span>
+                            <span class="expense-amount">
+                                -{{ "%.2f"|format(transaction.amount) }} ₽
+                            </span>
 
                         {% endif %}
 
@@ -367,11 +446,8 @@
 
                 <tr>
 
-                    <td
-                        colspan="5"
-                        class="empty-table"
-                    >
-                        Операций пока нет
+                    <td colspan="5">
+                        Операций за выбранный период нет.
                     </td>
 
                 </tr>
@@ -387,255 +463,86 @@
 </div>
 
 
-<!-- =====================================================
-     ОБЩАЯ ИНФОРМАЦИЯ
-===================================================== -->
+<!-- ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ -->
 
-<div class="reports-grid">
+<div class="panel">
 
-
-    <div class="report-info-card">
-
-        <div class="report-info-icon">
-            💰
-        </div>
-
+    <div class="panel-header">
         <div>
-
-            <strong>
-                Выданные деньги
-            </strong>
-
-            <p>
-                {{ transfers|length }}
-                операций выдачи
-            </p>
-
-            <a href="/money-transfers">
-                Перейти →
-            </a>
-
+            <h2>Дополнительная информация</h2>
         </div>
-
     </div>
 
 
+    <table>
 
-    <div class="report-info-card">
+        <tbody>
 
-        <div class="report-info-icon">
-            🧾
-        </div>
+            <tr>
+                <td><strong>Выданные деньги</strong></td>
 
-        <div>
+                <td>
+                    {{ report.transfer_count }} операций
+                </td>
 
-            <strong>
-                Чеки
-            </strong>
-
-            <p>
-                {{ receipts|length }}
-                загруженных чеков
-            </p>
-
-            <a href="/receipts">
-                Перейти →
-            </a>
-
-        </div>
-
-    </div>
+                <td>
+                    {{ "%.2f"|format(report.transfer_total) }} ₽
+                </td>
+            </tr>
 
 
+            <tr>
+                <td><strong>Чеки</strong></td>
 
-    <div class="report-info-card">
+                <td>
+                    {{ report.receipt_count }}
+                </td>
 
-        <div class="report-info-icon">
-            📦
-        </div>
+                <td>
+                    загруженных чеков
+                </td>
+            </tr>
 
-        <div>
 
-            <strong>
-                Заявки
-            </strong>
+            <tr>
+                <td><strong>Заявки</strong></td>
 
-            <p>
-                {{ purchase_requests|length }}
-                заявок на покупку
-            </p>
+                <td>
+                    {{ report.purchase_request_count }}
+                </td>
 
-            <a href="/purchase-requests">
-                Перейти →
-            </a>
+                <td>
+                    заявок на покупку
+                </td>
+            </tr>
 
-        </div>
+        </tbody>
 
-    </div>
-
+    </table>
 
 </div>
 
 
-<style>
+<script>
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-    margin-bottom: 24px;
-}
+function toggleCustomDates() {
 
-.stat-card {
-    background: white;
-    border: 1px solid #eaecf0;
-    border-radius: 16px;
-    padding: 22px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
+    const period = document.getElementById("period");
+    const customDates = document.getElementById("custom-dates");
 
-.stat-card-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    font-weight: 700;
-}
-
-.stat-card-icon.income {
-    background: #dcfce7;
-    color: #15803d;
-}
-
-.stat-card-icon.expense {
-    background: #fee2e2;
-    color: #b91c1c;
-}
-
-.stat-card-icon.balance {
-    background: #eef2ff;
-    color: #4f46e5;
-}
-
-.stat-card-label {
-    display: block;
-    font-size: 13px;
-    color: #667085;
-    margin-bottom: 5px;
-}
-
-.stat-card-value {
-    display: block;
-    font-size: 22px;
-    color: #101828;
-}
-
-.income-text {
-    color: #15803d;
-}
-
-.expense-text {
-    color: #b91c1c;
-}
-
-.income-badge {
-    background: #dcfce7;
-    color: #15803d;
-}
-
-.expense-badge {
-    background: #fee2e2;
-    color: #b91c1c;
-}
-
-.progress-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 180px;
-}
-
-.progress {
-    height: 7px;
-    background: #eef2f6;
-    border-radius: 20px;
-    overflow: hidden;
-    flex: 1;
-}
-
-.progress-bar {
-    height: 100%;
-    background: #4f46e5;
-    border-radius: 20px;
-}
-
-.panel-link {
-    text-decoration: none;
-    color: #4f46e5;
-    font-size: 14px;
-    font-weight: 600;
-}
-
-.reports-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-    margin-top: 24px;
-}
-
-.report-info-card {
-    background: white;
-    border: 1px solid #eaecf0;
-    border-radius: 16px;
-    padding: 20px;
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-}
-
-.report-info-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-    background: #f2f4f7;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-}
-
-.report-info-card strong {
-    display: block;
-    margin-bottom: 5px;
-}
-
-.report-info-card p {
-    margin: 0 0 8px;
-    color: #667085;
-    font-size: 13px;
-}
-
-.report-info-card a {
-    color: #4f46e5;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 600;
-}
-
-@media (max-width: 900px) {
-
-    .stats-grid,
-    .reports-grid {
-        grid-template-columns: 1fr;
+    if (period.value === "custom") {
+        customDates.hidden = false;
+    } else {
+        customDates.hidden = true;
     }
-
 }
 
-</style>
+
+document.addEventListener(
+    "DOMContentLoaded",
+    toggleCustomDates
+);
+
+</script>
 
 {% endblock %}

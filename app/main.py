@@ -1,3 +1,21 @@
+import io
+from pathlib import Path
+
+from fastapi.responses import StreamingResponse
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+)
 from typing import List
 
 from fastapi import (
@@ -17,6 +35,7 @@ from fastapi.responses import (
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
+
 from starlette.middleware.sessions import SessionMiddleware
 
 from sqlalchemy.orm import Session
@@ -29,6 +48,7 @@ from .statistics import get_statistics
 from .recurring_service import generate_recurring_transactions
 from .forecast import get_financial_forecast
 from .notification_service import generate_notifications
+from .report_service import get_financial_report
 
 
 # =========================================================
@@ -1164,31 +1184,750 @@ def change_employee_role(
 )
 def reports_page(
     request: Request,
+    period: str = "month",
+    date_from: str = None,
+    date_to: str = None,
     db: Session = Depends(get_db)
 ):
-    statistics = crud.get_report_statistics(db)
 
-    transactions = crud.get_transactions(db)
+    from datetime import date
 
-    transfers = crud.get_money_transfers(db)
+    custom_from = None
+    custom_to = None
 
-    receipts = crud.get_receipts(db)
+    if period == "custom":
 
-    purchase_requests = crud.get_purchase_requests(db)
+        try:
+            if date_from:
+                custom_from = date.fromisoformat(
+                    date_from
+                )
+
+            if date_to:
+                custom_to = date.fromisoformat(
+                    date_to
+                )
+
+        except ValueError:
+
+            custom_from = None
+            custom_to = None
+
+    report = get_financial_report(
+        db=db,
+        period=period,
+        date_from=custom_from,
+        date_to=custom_to
+    )
 
     return templates.TemplateResponse(
         request=request,
         name="reports.html",
         context={
-            "statistics": statistics,
-            "transactions": transactions,
-            "transfers": transfers,
-            "receipts": receipts,
-            "purchase_requests": purchase_requests
+            "report": report
         }
     )
 
 
+
+def register_pdf_fonts():
+    """
+    Подключаем Arial, чтобы русский текст нормально отображался в PDF.
+    """
+
+    regular = Path("C:/Windows/Fonts/arial.ttf")
+    bold = Path("C:/Windows/Fonts/arialbd.ttf")
+
+    if not regular.exists():
+        raise FileNotFoundError(
+            "Не найден шрифт Arial: C:/Windows/Fonts/arial.ttf"
+        )
+
+    pdfmetrics.registerFont(
+        TTFont("Arial", str(regular))
+    )
+
+    if bold.exists():
+        pdfmetrics.registerFont(
+            TTFont("Arial-Bold", str(bold))
+        )
+    else:
+        pdfmetrics.registerFont(
+            TTFont("Arial-Bold", str(regular))
+        )
+
+
+
+@app.get("/reports/pdf")
+def reports_pdf(
+    period: str = "month",
+    date_from: str = None,
+    date_to: str = None,
+    db: Session = Depends(get_db)
+):
+    from datetime import date
+
+    # -----------------------------------------
+    # Обрабатываем произвольный период
+    # -----------------------------------------
+
+    custom_from = None
+    custom_to = None
+
+    if period == "custom":
+        try:
+            if date_from:
+                custom_from = date.fromisoformat(date_from)
+
+            if date_to:
+                custom_to = date.fromisoformat(date_to)
+
+        except ValueError:
+            custom_from = None
+            custom_to = None
+
+    # -----------------------------------------
+    # Получаем данные отчёта
+    # -----------------------------------------
+
+    report = get_financial_report(
+        db=db,
+        period=period,
+        date_from=custom_from,
+        date_to=custom_to
+    )
+
+    # -----------------------------------------
+    # Подключаем шрифты
+    # -----------------------------------------
+
+    register_pdf_fonts()
+
+    # -----------------------------------------
+    # Создаём PDF в памяти
+    # -----------------------------------------
+
+    buffer = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=15 * mm,
+        leftMargin=15 * mm,
+        topMargin=15 * mm,
+        bottomMargin=15 * mm,
+        title="Финансовый отчёт",
+        author="Finance Max Alice"
+    )
+
+    # -----------------------------------------
+    # Стили
+    # -----------------------------------------
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "TitleCustom",
+        parent=styles["Title"],
+        fontName="Arial-Bold",
+        fontSize=20,
+        leading=24,
+        alignment=TA_CENTER,
+        spaceAfter=8 * mm,
+    )
+
+    subtitle_style = ParagraphStyle(
+        "SubtitleCustom",
+        parent=styles["Normal"],
+        fontName="Arial",
+        fontSize=10,
+        leading=14,
+        alignment=TA_CENTER,
+        spaceAfter=8 * mm,
+    )
+
+    heading_style = ParagraphStyle(
+        "HeadingCustom",
+        parent=styles["Heading2"],
+        fontName="Arial-Bold",
+        fontSize=13,
+        leading=16,
+        spaceBefore=6 * mm,
+        spaceAfter=4 * mm,
+    )
+
+    normal_style = ParagraphStyle(
+        "NormalCustom",
+        parent=styles["Normal"],
+        fontName="Arial",
+        fontSize=9,
+        leading=12,
+    )
+
+    small_style = ParagraphStyle(
+        "SmallCustom",
+        parent=styles["Normal"],
+        fontName="Arial",
+        fontSize=8,
+        leading=10,
+    )
+
+    # -----------------------------------------
+    # Содержимое PDF
+    # -----------------------------------------
+
+    elements = []
+
+    # Название
+    elements.append(
+        Paragraph(
+            "ФИНАНСОВЫЙ ОТЧЁТ",
+            title_style
+        )
+    )
+
+    # Период
+    date_from_report = report.get("date_from")
+    date_to_report = report.get("date_to")
+
+    if date_from_report and date_to_report:
+
+        period_text = (
+            f"Период: "
+            f"{date_from_report.strftime('%d.%m.%Y')} — "
+            f"{date_to_report.strftime('%d.%m.%Y')}"
+        )
+
+    else:
+
+        period_text = f"Период: {period}"
+
+    elements.append(
+        Paragraph(
+            period_text,
+            subtitle_style
+        )
+    )
+
+    # -----------------------------------------
+    # Основные показатели
+    # -----------------------------------------
+
+    elements.append(
+        Paragraph(
+            "Основные финансовые показатели",
+            heading_style
+        )
+    )
+
+    income = float(report.get("income", 0) or 0)
+    expense = float(report.get("expense", 0) or 0)
+    balance = float(report.get("balance", 0) or 0)
+
+    finance_data = [
+        [
+            Paragraph("<b>Доходы</b>", normal_style),
+            Paragraph(
+                f"{income:,.2f} ₽".replace(",", " "),
+                normal_style
+            ),
+        ],
+        [
+            Paragraph("<b>Расходы</b>", normal_style),
+            Paragraph(
+                f"{expense:,.2f} ₽".replace(",", " "),
+                normal_style
+            ),
+        ],
+        [
+            Paragraph("<b>Чистый результат</b>", normal_style),
+            Paragraph(
+                f"{balance:,.2f} ₽".replace(",", " "),
+                normal_style
+            ),
+        ],
+    ]
+
+    finance_table = Table(
+        finance_data,
+        colWidths=[
+            90 * mm,
+            80 * mm
+        ]
+    )
+
+    finance_table.setStyle(
+        TableStyle([
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.5,
+                colors.grey
+            ),
+            (
+                "BACKGROUND",
+                (0, 0),
+                (0, -1),
+                colors.whitesmoke
+            ),
+            (
+                "ALIGN",
+                (1, 0),
+                (1, -1),
+                "RIGHT"
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "MIDDLE"
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                6
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                6
+            ),
+        ])
+    )
+
+    elements.append(finance_table)
+
+    # -----------------------------------------
+    # Краткая статистика
+    # -----------------------------------------
+
+    elements.append(
+        Paragraph(
+            "Краткая статистика",
+            heading_style
+        )
+    )
+
+    statistics_data = [
+        [
+            Paragraph("<b>Показатель</b>", normal_style),
+            Paragraph("<b>Значение</b>", normal_style),
+        ],
+        [
+            Paragraph("Количество операций", normal_style),
+            Paragraph(
+                str(report.get("transaction_count", 0)),
+                normal_style
+            ),
+        ],
+        [
+            Paragraph("Выдано сотрудникам", normal_style),
+            Paragraph(
+                f"{float(report.get('transfer_total', 0) or 0):,.2f} ₽"
+                .replace(",", " "),
+                normal_style
+            ),
+        ],
+        [
+            Paragraph("Количество выдач", normal_style),
+            Paragraph(
+                str(report.get("transfer_count", 0)),
+                normal_style
+            ),
+        ],
+        [
+            Paragraph("Количество чеков", normal_style),
+            Paragraph(
+                str(report.get("receipt_count", 0)),
+                normal_style
+            ),
+        ],
+        [
+            Paragraph("Заявки на закупку", normal_style),
+            Paragraph(
+                str(report.get("purchase_request_count", 0)),
+                normal_style
+            ),
+        ],
+    ]
+
+    statistics_table = Table(
+        statistics_data,
+        colWidths=[
+            90 * mm,
+            80 * mm
+        ]
+    )
+
+    statistics_table.setStyle(
+        TableStyle([
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.5,
+                colors.grey
+            ),
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.whitesmoke
+            ),
+            (
+                "ALIGN",
+                (1, 1),
+                (1, -1),
+                "RIGHT"
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "MIDDLE"
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+        ])
+    )
+
+    elements.append(statistics_table)
+
+    # -----------------------------------------
+    # Расходы по категориям
+    # -----------------------------------------
+
+    elements.append(
+        Paragraph(
+            "Расходы по категориям",
+            heading_style
+        )
+    )
+
+    categories = {}
+
+    transactions = report.get("transactions", [])
+
+    for transaction in transactions:
+
+        transaction_type = getattr(
+            transaction,
+            "type",
+            None
+        )
+
+        if transaction_type != "expense":
+            continue
+
+        category = getattr(
+            transaction,
+            "category",
+            None
+        ) or "Без категории"
+
+        amount = float(
+            getattr(
+                transaction,
+                "amount",
+                0
+            ) or 0
+        )
+
+        categories[category] = (
+            categories.get(category, 0) + amount
+        )
+
+    category_data = [
+        [
+            Paragraph("<b>Категория</b>", small_style),
+            Paragraph("<b>Сумма</b>", small_style),
+            Paragraph("<b>Доля</b>", small_style),
+        ]
+    ]
+
+    for category, amount in categories.items():
+
+        if expense > 0:
+            percent = amount / expense * 100
+        else:
+            percent = 0
+
+        category_data.append([
+            Paragraph(
+                str(category),
+                small_style
+            ),
+            Paragraph(
+                f"{amount:,.2f} ₽".replace(",", " "),
+                small_style
+            ),
+            Paragraph(
+                f"{percent:.1f}%",
+                small_style
+            ),
+        ])
+
+    if not categories:
+
+        category_data.append([
+            Paragraph(
+                "Расходов за выбранный период нет.",
+                small_style
+            ),
+            "",
+            "",
+        ])
+
+    category_table = Table(
+        category_data,
+        colWidths=[
+            80 * mm,
+            55 * mm,
+            35 * mm
+        ],
+        repeatRows=1
+    )
+
+    category_table.setStyle(
+        TableStyle([
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.5,
+                colors.grey
+            ),
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.whitesmoke
+            ),
+            (
+                "ALIGN",
+                (1, 1),
+                (-1, -1),
+                "RIGHT"
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "MIDDLE"
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+        ])
+    )
+
+    elements.append(category_table)
+
+    # -----------------------------------------
+    # Операции
+    # -----------------------------------------
+
+    elements.append(
+        Paragraph(
+            "Операции за период",
+            heading_style
+        )
+    )
+
+    transaction_data = [
+        [
+            Paragraph("<b>Дата</b>", small_style),
+            Paragraph("<b>Тип</b>", small_style),
+            Paragraph("<b>Категория</b>", small_style),
+            Paragraph("<b>Сумма</b>", small_style),
+            Paragraph("<b>Описание</b>", small_style),
+        ]
+    ]
+
+    for transaction in transactions:
+
+        transaction_date = getattr(
+            transaction,
+            "date",
+            ""
+        )
+
+        transaction_type = getattr(
+            transaction,
+            "type",
+            ""
+        )
+
+        category = getattr(
+            transaction,
+            "category",
+            ""
+        ) or "—"
+
+        amount = float(
+            getattr(
+                transaction,
+                "amount",
+                0
+            ) or 0
+        )
+
+        description = getattr(
+            transaction,
+            "description",
+            None
+        ) or "—"
+
+        if transaction_type == "income":
+            type_text = "Доход"
+            amount_text = f"+{amount:,.2f} ₽".replace(",", " ")
+        else:
+            type_text = "Расход"
+            amount_text = f"-{amount:,.2f} ₽".replace(",", " ")
+
+        if hasattr(transaction_date, "strftime"):
+            date_text = transaction_date.strftime(
+                "%d.%m.%Y"
+            )
+        else:
+            date_text = str(transaction_date)
+
+        transaction_data.append([
+            Paragraph(
+                date_text,
+                small_style
+            ),
+            Paragraph(
+                type_text,
+                small_style
+            ),
+            Paragraph(
+                str(category),
+                small_style
+            ),
+            Paragraph(
+                amount_text,
+                small_style
+            ),
+            Paragraph(
+                str(description),
+                small_style
+            ),
+        ])
+
+    if not transactions:
+
+        transaction_data.append([
+            Paragraph(
+                "Операций за выбранный период нет.",
+                small_style
+            ),
+            "",
+            "",
+            "",
+            "",
+        ])
+
+    transaction_table = Table(
+        transaction_data,
+        colWidths=[
+            25 * mm,
+            22 * mm,
+            35 * mm,
+            30 * mm,
+            58 * mm,
+        ],
+        repeatRows=1
+    )
+
+    transaction_table.setStyle(
+        TableStyle([
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.4,
+                colors.grey
+            ),
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.whitesmoke
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "TOP"
+            ),
+            (
+                "ALIGN",
+                (3, 1),
+                (3, -1),
+                "RIGHT"
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            ),
+        ])
+    )
+
+    elements.append(transaction_table)
+
+    # -----------------------------------------
+    # Формируем PDF
+    # -----------------------------------------
+
+    doc.build(elements)
+
+    buffer.seek(0)
+
+    # -----------------------------------------
+    # Возвращаем PDF пользователю
+    # -----------------------------------------
+
+    filename = "financial_report.pdf"
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{filename}"'
+        }
+    )
 # =========================================================
 # HTML HOME
 # =========================================================
