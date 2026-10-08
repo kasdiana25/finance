@@ -313,7 +313,7 @@ class MoneyTransfer(Base):
     account = Column(
         String,
         nullable=False,
-        default="cash"
+        default="None"
     )
 
     purpose = Column(
