@@ -1,104 +1,193 @@
 {% extends "base.html" %}
 
-{% block title %}Отчёты{% endblock %}
+{% block title %}
+Отчёты
+{% endblock %}
 
 {% block content %}
 
+
+<!-- =========================================================
+     ЗАГОЛОВОК
+========================================================= -->
+
 <div class="dashboard-header">
+
     <div>
-        <h1>Отчёты</h1>
-        <p>Финансовая аналитика и сводная информация</p>
+
+        <h1>
+            Отчёты
+        </h1>
+
+        <p>
+            Финансовая аналитика и сводная информация
+        </p>
+
     </div>
+
 </div>
 
 
-<!-- ВЫБОР ПЕРИОДА -->
+<!-- =========================================================
+     ПЕРИОД
+========================================================= -->
 
 <div class="panel">
+
     <div class="panel-header">
+
         <div>
-            <h2>Период отчёта</h2>
+
+            <h2>
+                Период отчёта
+            </h2>
+
             <p class="panel-description">
-                Выберите период, за который необходимо сформировать отчёт
+                Выберите период, за который необходимо
+                сформировать отчёт
             </p>
+
         </div>
+
     </div>
 
-    <form method="get" action="/reports">
 
-        <label for="period">Период</label>
+    <form
+        method="get"
+        action="/reports"
+    >
+
+        <label for="period">
+            Период
+        </label>
+
 
         <select
             id="period"
             name="period"
             onchange="toggleCustomDates()"
         >
-            <option value="today"
-                {% if report.period == "today" %}selected{% endif %}>
+
+            <option
+                value="today"
+                {% if report.period == "today" %}
+                selected
+                {% endif %}
+            >
                 Сегодня
             </option>
 
-            <option value="yesterday"
-                {% if report.period == "yesterday" %}selected{% endif %}>
+            <option
+                value="yesterday"
+                {% if report.period == "yesterday" %}
+                selected
+                {% endif %}
+            >
                 Вчера
             </option>
 
-            <option value="week"
-                {% if report.period == "week" %}selected{% endif %}>
+            <option
+                value="week"
+                {% if report.period == "week" %}
+                selected
+                {% endif %}
+            >
                 Эта неделя
             </option>
 
-            <option value="last_week"
-                {% if report.period == "last_week" %}selected{% endif %}>
+            <option
+                value="last_week"
+                {% if report.period == "last_week" %}
+                selected
+                {% endif %}
+            >
                 Прошлая неделя
             </option>
 
-            <option value="month"
-                {% if report.period == "month" %}selected{% endif %}>
+            <option
+                value="month"
+                {% if report.period == "month" %}
+                selected
+                {% endif %}
+            >
                 Этот месяц
             </option>
 
-            <option value="last_month"
-                {% if report.period == "last_month" %}selected{% endif %}>
+            <option
+                value="last_month"
+                {% if report.period == "last_month" %}
+                selected
+                {% endif %}
+            >
                 Прошлый месяц
             </option>
 
-            <option value="year"
-                {% if report.period == "year" %}selected{% endif %}>
+            <option
+                value="year"
+                {% if report.period == "year" %}
+                selected
+                {% endif %}
+            >
                 Этот год
             </option>
 
-            <option value="custom"
-                {% if report.period == "custom" %}selected{% endif %}>
+            <option
+                value="custom"
+                {% if report.period == "custom" %}
+                selected
+                {% endif %}
+            >
                 Произвольный период
             </option>
+
         </select>
 
 
-        <div id="custom-dates" hidden>
+        <!-- Произвольные даты -->
 
-            <label for="date_from">С</label>
+        <div
+            id="custom-dates"
+            hidden
+        >
+
+            <label for="date_from">
+                С
+            </label>
 
             <input
                 type="date"
                 id="date_from"
                 name="date_from"
-                value="{% if report.date_from %}{{ report.date_from.strftime('%Y-%m-%d') }}{% endif %}"
+                value="
+                {% if report.date_from %}
+                    {{ report.date_from.strftime('%Y-%m-%d') }}
+                {% endif %}
+                "
             >
 
-            <label for="date_to">По</label>
+
+            <label for="date_to">
+                По
+            </label>
 
             <input
                 type="date"
                 id="date_to"
                 name="date_to"
-                value="{% if report.date_to %}{{ report.date_to.strftime('%Y-%m-%d') }}{% endif %}"
+                value="
+                {% if report.date_to %}
+                    {{ report.date_to.strftime('%Y-%m-%d') }}
+                {% endif %}
+                "
             >
 
         </div>
 
 
-        <button type="submit" class="main-button">
+        <button
+            type="submit"
+            class="main-button"
+        >
             Сформировать отчёт
         </button>
 
@@ -106,23 +195,33 @@
 
 
     <p>
-        <strong>Отчёт за период:</strong>
+
+        <strong>
+            Отчёт за период:
+        </strong>
 
         {{ report.date_from.strftime('%d.%m.%Y') }}
+
         —
+
         {{ report.date_to.strftime('%d.%m.%Y') }}
+
     </p>
 
 
-    <!-- КНОПКА PDF -->
+    <!-- PDF -->
 
-    <form method="get" action="/reports/pdf">
+    <form
+        method="get"
+        action="/reports/pdf"
+    >
 
         <input
             type="hidden"
             name="period"
             value="{{ report.period }}"
         >
+
 
         {% if report.period == "custom" %}
 
@@ -140,7 +239,11 @@
 
         {% endif %}
 
-        <button type="submit" class="main-button">
+
+        <button
+            type="submit"
+            class="main-button"
+        >
             Скачать PDF
         </button>
 
@@ -149,106 +252,157 @@
 </div>
 
 
-<!-- ФИНАНСОВЫЕ ПОКАЗАТЕЛИ -->
+<!-- =========================================================
+     ОСНОВНЫЕ ПОКАЗАТЕЛИ
+========================================================= -->
 
 <div class="dashboard-cards">
 
+
     <div class="finance-card income">
-        <div class="icon">↑</div>
+
+        <div class="icon">
+            ↑
+        </div>
 
         <div>
-            <h3>Доходы за период</h3>
+
+            <h3>
+                Доходы за период
+            </h3>
 
             <p>
                 {{ "%.2f"|format(report.income) }} ₽
             </p>
+
         </div>
+
     </div>
 
 
     <div class="finance-card expense">
-        <div class="icon">↓</div>
+
+        <div class="icon">
+            ↓
+        </div>
 
         <div>
-            <h3>Расходы за период</h3>
+
+            <h3>
+                Расходы за период
+            </h3>
 
             <p>
                 {{ "%.2f"|format(report.expense) }} ₽
             </p>
+
         </div>
+
     </div>
 
 
     <div class="finance-card balance">
-        <div class="icon">₽</div>
+
+        <div class="icon">
+            ₽
+        </div>
 
         <div>
-            <h3>Чистый результат</h3>
+
+            <h3>
+                Чистый результат
+            </h3>
 
             <p>
                 {{ "%.2f"|format(report.balance) }} ₽
             </p>
+
         </div>
+
     </div>
 
 </div>
 
 
-<!-- КРАТКАЯ СТАТИСТИКА -->
+<!-- =========================================================
+     ЦЕЛЬ НА НЕДЕЛЮ
+========================================================= -->
 
 <div class="panel">
 
     <div class="panel-header">
+
         <div>
-            <h2>Краткая статистика</h2>
-        </div>
-    </div>
 
-    <table>
-
-        <tbody>
-
-            <tr>
-                <td><strong>Количество операций</strong></td>
-                <td>{{ report.transaction_count }}</td>
-            </tr>
-
-            <tr>
-                <td><strong>Выдано сотрудникам</strong></td>
-                <td>
-                    {{ "%.2f"|format(report.transfer_total) }} ₽
-                </td>
-            </tr>
-
-            <tr>
-                <td><strong>Количество чеков</strong></td>
-                <td>{{ report.receipt_count }}</td>
-            </tr>
-
-            <tr>
-                <td><strong>Заявки на закупку</strong></td>
-                <td>{{ report.purchase_request_count }}</td>
-            </tr>
-
-        </tbody>
-
-    </table>
-
-</div>
-
-
-<!-- РАСХОДЫ ПО КАТЕГОРИЯМ -->
-
-<div class="panel">
-
-    <div class="panel-header">
-        <div>
-            <h2>Расходы по категориям</h2>
+            <h2>
+                🎯 Цель на неделю
+            </h2>
 
             <p class="panel-description">
-                Распределение расходов за выбранный период
+                Планируемый доход и фактический результат
             </p>
+
         </div>
+
+    </div>
+
+
+    {% if report.weekly_goal %}
+
+    <div class="dashboard-cards">
+
+
+        <div class="finance-card">
+
+            <div class="icon">
+                🎯
+            </div>
+
+            <div>
+
+                <h3>
+                    Цель
+                </h3>
+
+                <p>
+                    {{
+                        "%.2f"|format(
+                            report.weekly_goal.target_income
+                        )
+                    }}
+                    ₽
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="finance-card income">
+
+            <div class="icon">
+                ✓
+            </div>
+
+            <div>
+
+                <h3>
+                    Результат
+                </h3>
+
+                <p>
+                    {{
+                        "%.2f"|format(
+                            report.weekly_goal.result_income
+                        )
+                    }}
+                    ₽
+                </p>
+
+            </div>
+
+        </div>
+
     </div>
 
 
@@ -259,9 +413,202 @@
             <thead>
 
                 <tr>
-                    <th>Категория</th>
-                    <th>Сумма</th>
-                    <th>Доля</th>
+
+                    <th>
+                        Показатель
+                    </th>
+
+                    <th>
+                        Сумма
+                    </th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Цель
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(
+                                report.weekly_goal.target_income
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                </tr>
+
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Результат
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(
+                                report.weekly_goal.result_income
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+
+    {% if report.weekly_goal.description %}
+
+    <p>
+
+        <strong>
+            Комментарий:
+        </strong>
+
+        {{ report.weekly_goal.description }}
+
+    </p>
+
+    {% endif %}
+
+
+    {% else %}
+
+
+    <p>
+        Цель на эту неделю пока не задана.
+    </p>
+
+
+    {% endif %}
+
+
+    <!-- Установка цели -->
+
+    <div
+        style="
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        "
+    >
+
+        <h3>
+            Установить цель
+        </h3>
+
+        <p class="panel-description">
+            Укажите сумму дохода, которую необходимо получить
+            за неделю.
+        </p>
+
+
+        <div
+            style="
+                display:flex;
+                gap:10px;
+                align-items:flex-end;
+                flex-wrap:wrap;
+            "
+        >
+
+            <div>
+
+                <label for="weekly-target">
+                    Цель, ₽
+                </label>
+
+                <input
+                    type="number"
+                    id="weekly-target"
+                    min="0"
+                    step="0.01"
+                    placeholder="Например, 500000"
+                    value="
+                    {% if report.weekly_goal %}
+                        {{ report.weekly_goal.target_income }}
+                    {% endif %}
+                    "
+                >
+
+            </div>
+
+
+            <button
+                type="button"
+                class="main-button"
+                onclick="saveWeeklyGoal()"
+            >
+                Сохранить цель
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     ДОХОДЫ ПО ИСТОЧНИКАМ
+========================================================= -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <div>
+
+            <h2>
+                💰 Доходы по источникам
+            </h2>
+
+            <p class="panel-description">
+                Разделение доходов на инвестиции и показы
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Источник
+                    </th>
+
+                    <th>
+                        Сумма
+                    </th>
+
+                    <th>
+                        Доля доходов
+                    </th>
+
                 </tr>
 
             </thead>
@@ -269,57 +616,556 @@
 
             <tbody>
 
-                {% set categories = {} %}
-
-                {% for transaction in report.transactions %}
-
-                    {% if transaction.type == "expense" %}
-
-                        {% if transaction.category in categories %}
-
-                            {% set _ = categories.update({
-                                transaction.category:
-                                categories[transaction.category] +
-                                transaction.amount
-                            }) %}
-
-                        {% else %}
-
-                            {% set _ = categories.update({
-                                transaction.category:
-                                transaction.amount
-                            }) %}
-
-                        {% endif %}
-
-                    {% endif %}
-
-                {% endfor %}
-
-
-                {% for category, amount in categories.items() %}
 
                 <tr>
 
                     <td>
-                        <strong>{{ category }}</strong>
+                        <strong>
+                            Инвестиции
+                        </strong>
                     </td>
 
                     <td>
-                        {{ "%.2f"|format(amount) }} ₽
+                        {{
+                            "%.2f"|format(
+                                report.income_by_source.investment
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                    <td>
+
+                        {% if report.income > 0 %}
+
+                        {{
+                            "%.1f"|format(
+                                report.income_by_source.investment
+                                /
+                                report.income
+                                * 100
+                            )
+                        }}%
+
+                        {% else %}
+
+                        —
+
+                        {% endif %}
+
+                    </td>
+
+                </tr>
+
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Показы
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(
+                                report.income_by_source.show
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                    <td>
+
+                        {% if report.income > 0 %}
+
+                        {{
+                            "%.1f"|format(
+                                report.income_by_source.show
+                                /
+                                report.income
+                                * 100
+                            )
+                        }}%
+
+                        {% else %}
+
+                        —
+
+                        {% endif %}
+
+                    </td>
+
+                </tr>
+
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Всего
+                        </strong>
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{ "%.2f"|format(report.income) }} ₽
+                        </strong>
+                    </td>
+
+                    <td>
+                        100%
+                    </td>
+
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     ДЕНЬГИ ПО СЧЕТАМ
+========================================================= -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <div>
+
+            <h2>
+                🏦 Деньги по счетам
+            </h2>
+
+            <p class="panel-description">
+                Наличные и расчётный счёт
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Счёт
+                    </th>
+
+                    <th>
+                        Доходы
+                    </th>
+
+                    <th>
+                        Расходы
+                    </th>
+
+                    <th>
+                        Текущий остаток
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Наличные
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(
+                                report.income_by_account.cash
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(
+                                report.expense_by_account.cash
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{
+                                "%.2f"|format(
+                                    report.account_balances.cash
+                                )
+                            }}
+                            ₽
+                        </strong>
+                    </td>
+
+                </tr>
+
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Расчётный счёт
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(
+                                report.income_by_account.bank_account
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(
+                                report.expense_by_account.bank_account
+                            )
+                        }}
+                        ₽
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{
+                                "%.2f"|format(
+                                    report.account_balances.bank_account
+                                )
+                            }}
+                            ₽
+                        </strong>
+                    </td>
+
+                </tr>
+
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Итого
+                        </strong>
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{
+                                "%.2f"|format(
+                                    report.income_by_account.cash
+                                    +
+                                    report.income_by_account.bank_account
+                                )
+                            }}
+                            ₽
+                        </strong>
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{
+                                "%.2f"|format(
+                                    report.expense_by_account.cash
+                                    +
+                                    report.expense_by_account.bank_account
+                                )
+                            }}
+                            ₽
+                        </strong>
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{
+                                "%.2f"|format(
+                                    report.account_balances.total
+                                )
+                            }}
+                            ₽
+                        </strong>
+                    </td>
+
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     ЗАРАБОТНАЯ ПЛАТА
+========================================================= -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <div>
+
+            <h2>
+                👥 Заработная плата
+            </h2>
+
+            <p class="panel-description">
+                Кому выдано, сколько выдано и сколько всего
+                потрачено на заработную плату
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="dashboard-cards">
+
+        <div class="finance-card expense">
+
+            <div class="icon">
+                ₽
+            </div>
+
+            <div>
+
+                <h3>
+                    Потрачено на зарплату
+                </h3>
+
+                <p>
+                    {{
+                        "%.2f"|format(
+                            report.salary_total
+                        )
+                    }}
+                    ₽
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Дата
+                    </th>
+
+                    <th>
+                        Кому выдано
+                    </th>
+
+                    <th>
+                        Счёт
+                    </th>
+
+                    <th>
+                        Сумма
+                    </th>
+
+                    <th>
+                        Описание
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                {% for salary in report.salary_entries %}
+
+                <tr>
+
+                    <td>
+                        {{ salary.date }}
+                    </td>
+
+                    <td>
+
+                        <strong>
+                            {{ salary.paid_to }}
+                        </strong>
+
+                    </td>
+
+                    <td>
+
+                        {% if salary.account == "cash" %}
+
+                            Наличные
+
+                        {% elif salary.account == "bank_account" %}
+
+                            Расчётный счёт
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </td>
+
+                    <td>
+
+                        <span class="expense-amount">
+
+                            -{{ "%.2f"|format(
+                                salary.amount
+                            ) }} ₽
+
+                        </span>
+
+                    </td>
+
+                    <td>
+                        {{ salary.description or "—" }}
+                    </td>
+
+                </tr>
+
+                {% else %}
+
+                <tr>
+
+                    <td colspan="5">
+                        Зарплатных выплат за выбранный
+                        период нет.
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     РАСХОДЫ ПО КАТЕГОРИЯМ
+========================================================= -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <div>
+
+            <h2>
+                📉 Расходы по категориям
+            </h2>
+
+            <p class="panel-description">
+                Категории используются только для расходов
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Категория
+                    </th>
+
+                    <th>
+                        Сумма
+                    </th>
+
+                    <th>
+                        Доля расходов
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                {% for category, amount
+                    in report.expense_by_category.items() %}
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            {{ category }}
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{
+                            "%.2f"|format(amount)
+                        }}
+                        ₽
                     </td>
 
                     <td>
 
                         {% if report.expense > 0 %}
 
-                            {{ "%.1f"|format(
-                                amount / report.expense * 100
-                            ) }}%
+                        {{
+                            "%.1f"|format(
+                                amount
+                                /
+                                report.expense
+                                * 100
+                            )
+                        }}%
 
                         {% else %}
 
-                            —
+                        —
 
                         {% endif %}
 
@@ -339,6 +1185,36 @@
 
                 {% endfor %}
 
+
+                {% if report.expense > 0 %}
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            Всего расходов
+                        </strong>
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{
+                                "%.2f"|format(
+                                    report.expense
+                                )
+                            }}
+                            ₽
+                        </strong>
+                    </td>
+
+                    <td>
+                        100%
+                    </td>
+
+                </tr>
+
+                {% endif %}
+
             </tbody>
 
         </table>
@@ -348,18 +1224,24 @@
 </div>
 
 
-<!-- ОПЕРАЦИИ -->
+<!-- =========================================================
+     ВСЕ ОПЕРАЦИИ
+========================================================= -->
 
 <div class="panel">
 
     <div class="panel-header">
 
         <div>
-            <h2>Операции за период</h2>
+
+            <h2>
+                Операции за период
+            </h2>
 
             <p class="panel-description">
                 Все финансовые операции за выбранный период
             </p>
+
         </div>
 
     </div>
@@ -372,11 +1254,39 @@
             <thead>
 
                 <tr>
-                    <th>Дата</th>
-                    <th>Тип</th>
-                    <th>Категория</th>
-                    <th>Сумма</th>
-                    <th>Описание</th>
+
+                    <th>
+                        Дата
+                    </th>
+
+                    <th>
+                        Тип
+                    </th>
+
+                    <th>
+                        Категория
+                    </th>
+
+                    <th>
+                        Источник
+                    </th>
+
+                    <th>
+                        Счёт
+                    </th>
+
+                    <th>
+                        Кому выдано
+                    </th>
+
+                    <th>
+                        Сумма
+                    </th>
+
+                    <th>
+                        Описание
+                    </th>
+
                 </tr>
 
             </thead>
@@ -384,7 +1294,8 @@
 
             <tbody>
 
-                {% for transaction in report.transactions %}
+                {% for transaction
+                    in report.transactions %}
 
                 <tr>
 
@@ -412,29 +1323,121 @@
                     </td>
 
 
+                    <!-- Категория -->
+
                     <td>
-                        {{ transaction.category }}
+
+                        {% if transaction.type == "expense" %}
+
+                            {{ transaction.category or "Без категории" }}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
                     </td>
 
+
+                    <!-- Источник -->
+
+                    <td>
+
+                        {% if transaction.type == "income" %}
+
+                            {% if transaction.income_source == "investment" %}
+
+                                Инвестиции
+
+                            {% elif transaction.income_source == "show" %}
+
+                                Показы
+
+                            {% else %}
+
+                                —
+
+                            {% endif %}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- Счёт -->
+
+                    <td>
+
+                        {% if transaction.account == "cash" %}
+
+                            Наличные
+
+                        {% elif transaction.account == "bank_account" %}
+
+                            Расчётный счёт
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- Кому выдано -->
+
+                    <td>
+
+                        {% if transaction.type == "expense"
+                              and transaction.category == "Заработная плата" %}
+
+                            {{ transaction.paid_to or "—" }}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- Сумма -->
 
                     <td>
 
                         {% if transaction.type == "income" %}
 
                             <span class="income-amount">
-                                +{{ "%.2f"|format(transaction.amount) }} ₽
+
+                                +{{ "%.2f"|format(
+                                    transaction.amount
+                                ) }} ₽
+
                             </span>
 
                         {% else %}
 
                             <span class="expense-amount">
-                                -{{ "%.2f"|format(transaction.amount) }} ₽
+
+                                -{{ "%.2f"|format(
+                                    transaction.amount
+                                ) }} ₽
+
                             </span>
 
                         {% endif %}
 
                     </td>
 
+
+                    <!-- Описание -->
 
                     <td>
                         {{ transaction.description or "—" }}
@@ -446,7 +1449,7 @@
 
                 <tr>
 
-                    <td colspan="5">
+                    <td colspan="8">
                         Операций за выбранный период нет.
                     </td>
 
@@ -463,14 +1466,22 @@
 </div>
 
 
-<!-- ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ -->
+<!-- =========================================================
+     ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ
+========================================================= -->
 
 <div class="panel">
 
     <div class="panel-header">
+
         <div>
-            <h2>Дополнительная информация</h2>
+
+            <h2>
+                Дополнительная информация
+            </h2>
+
         </div>
+
     </div>
 
 
@@ -479,41 +1490,72 @@
         <tbody>
 
             <tr>
-                <td><strong>Выданные деньги</strong></td>
 
                 <td>
-                    {{ report.transfer_count }} операций
+                    <strong>
+                        Количество операций
+                    </strong>
                 </td>
 
                 <td>
-                    {{ "%.2f"|format(report.transfer_total) }} ₽
+                    {{ report.transaction_count }}
                 </td>
+
             </tr>
 
 
             <tr>
-                <td><strong>Чеки</strong></td>
+
+                <td>
+                    <strong>
+                        Выданные деньги
+                    </strong>
+                </td>
+
+                <td>
+
+                    {{ report.transfer_count }}
+                    операций /
+
+                    {{
+                        "%.2f"|format(
+                            report.transfer_total
+                        )
+                    }}
+                    ₽
+
+                </td>
+
+            </tr>
+
+
+            <tr>
+
+                <td>
+                    <strong>
+                        Чеки
+                    </strong>
+                </td>
 
                 <td>
                     {{ report.receipt_count }}
                 </td>
 
-                <td>
-                    загруженных чеков
-                </td>
             </tr>
 
 
             <tr>
-                <td><strong>Заявки</strong></td>
+
+                <td>
+                    <strong>
+                        Заявки на покупку
+                    </strong>
+                </td>
 
                 <td>
                     {{ report.purchase_request_count }}
                 </td>
 
-                <td>
-                    заявок на покупку
-                </td>
             </tr>
 
         </tbody>
@@ -525,24 +1567,227 @@
 
 <script>
 
+/* =========================================================
+   ПРОИЗВОЛЬНЫЙ ПЕРИОД
+========================================================= */
+
 function toggleCustomDates() {
 
-    const period = document.getElementById("period");
-    const customDates = document.getElementById("custom-dates");
+    const period =
+        document.getElementById(
+            'period'
+        );
 
-    if (period.value === "custom") {
-        customDates.hidden = false;
-    } else {
-        customDates.hidden = true;
+    const customDates =
+        document.getElementById(
+            'custom-dates'
+        );
+
+
+    if (!period || !customDates) {
+        return;
     }
+
+
+    customDates.hidden =
+        period.value !== 'custom';
 }
 
 
+/* =========================================================
+   СОХРАНЕНИЕ ЦЕЛИ
+========================================================= */
+
+async function saveWeeklyGoal() {
+
+    const input =
+        document.getElementById(
+            'weekly-target'
+        );
+
+
+    if (!input) {
+        return;
+    }
+
+
+    const targetIncome =
+        parseFloat(
+            input.value
+        );
+
+
+    if (
+        isNaN(targetIncome)
+        ||
+        targetIncome < 0
+    ) {
+
+        alert(
+            'Введите корректную сумму цели.'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Берём дату начала текущего отчёта
+     * и определяем понедельник этой недели.
+     */
+
+    const reportDate =
+        new Date(
+            '{{ report.date_from.strftime("%Y-%m-%d") }}T00:00:00'
+        );
+
+
+    const day =
+        reportDate.getDay();
+
+
+    const diff =
+        day === 0
+            ? -6
+            : 1 - day;
+
+
+    reportDate.setDate(
+        reportDate.getDate()
+        + diff
+    );
+
+
+    const year =
+        reportDate.getFullYear();
+
+
+    const month =
+        String(
+            reportDate.getMonth() + 1
+        ).padStart(2, '0');
+
+
+    const date =
+        String(
+            reportDate.getDate()
+        ).padStart(2, '0');
+
+
+    const weekStart =
+        `${year}-${month}-${date}`;
+
+
+    try {
+
+        const response =
+            await fetch(
+                '/api/weekly-goal',
+                {
+
+                    method: 'POST',
+
+                    headers: {
+                        'Content-Type':
+                            'application/json'
+                    },
+
+                    body: JSON.stringify({
+
+                        week_start:
+                            weekStart,
+
+                        target_income:
+                            targetIncome,
+
+                        /*
+                         * Эти два поля нужны старой
+                         * схеме WeeklyGoal.
+                         * В интерфейсе они больше
+                         * нигде не используются.
+                         */
+
+                        target_expense:
+                            0,
+
+                        target_balance:
+                            0,
+
+                        description:
+                            ''
+
+                    })
+
+                }
+            );
+
+
+        if (!response.ok) {
+
+            let message =
+                'Не удалось сохранить цель.';
+
+
+            try {
+
+                const data =
+                    await response.json();
+
+                if (data.detail) {
+                    message =
+                        data.detail;
+                }
+
+            } catch (error) {
+                // Ничего не делаем
+            }
+
+
+            throw new Error(
+                message
+            );
+        }
+
+
+        alert(
+            'Цель на неделю сохранена.'
+        );
+
+
+        location.reload();
+
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+        alert(
+            error.message
+            ||
+            'Не удалось сохранить цель.'
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   ЗАПУСК
+========================================================= */
+
 document.addEventListener(
-    "DOMContentLoaded",
-    toggleCustomDates
+    'DOMContentLoaded',
+    function() {
+
+        toggleCustomDates();
+
+    }
 );
 
 </script>
+
 
 {% endblock %}

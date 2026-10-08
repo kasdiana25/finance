@@ -11,15 +11,18 @@ from dotenv import load_dotenv
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
-    KeyboardButton
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
 )
 
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
-    filters
+    filters,
 )
 from telegram.request import HTTPXRequest
 from ..database import SessionLocal
@@ -124,10 +127,6 @@ async def send_subscription_notification(
             error
         )
 
-
-# =========================================================
-# ПОЛУЧЕНИЕ АКТИВНОЙ ВЫДАЧИ
-# =========================================================
 
 # =========================================================
 # ПОЛУЧЕНИЕ АКТИВНОЙ ВЫДАЧИ
@@ -269,6 +268,46 @@ def get_employee_balance(db, user_internal_id: int) -> float:
     return balance
 
 
+def get_employee_issued_spent(db, user_internal_id: int):
+    """Возвращает (выдано, потрачено) для сотрудника."""
+    user = (
+        db.query(TelegramUser)
+        .filter(TelegramUser.id == user_internal_id)
+        .first()
+    )
+    if not user:
+        return 0.0, 0.0
+
+    transfers = (
+        db.query(MoneyTransfer)
+        .filter(
+            MoneyTransfer.telegram_user_id == user_internal_id
+        )
+        .all()
+    )
+    total_issued = sum(float(t.amount) for t in transfers)
+
+    expenses = (
+        db.query(EmployeeExpense)
+        .filter(
+            EmployeeExpense.telegram_user_id == user.telegram_id
+        )
+        .all()
+    )
+
+    total_spent = 0.0
+    for expense in expenses:
+        transaction = (
+            db.query(Transaction)
+            .filter(Transaction.id == expense.transaction_id)
+            .first()
+        )
+        if transaction:
+            total_spent += float(transaction.amount)
+
+    return total_issued, total_spent
+
+
 def get_transfer_spent_amount(db, transfer_id: int):
     """
     Сколько уже списано с конкретной выдачи.
@@ -399,27 +438,19 @@ def director_keyboard():
         [
             [
                 KeyboardButton("💳 Выдать деньги"),
-                KeyboardButton("💰 Финансы")
+                KeyboardButton("📦 Заявки")
             ],
             [
-                KeyboardButton("📦 Заявки"),
-                KeyboardButton("🧾 Чеки")
+                KeyboardButton("📜 История операций"),
+                KeyboardButton("💳 Выданные деньги")
             ],
             [
-                KeyboardButton("💳 Выданные деньги"),
-                KeyboardButton("📊 Отчёты")
-            ],
-            [
+                KeyboardButton("📊 Отчёты"),
                 KeyboardButton("👤 Сотрудники")
-            ],
-            [
-                KeyboardButton("🏠 Главное меню")
             ]
         ],
         resize_keyboard=True
     )
-
-
 
 
 async def start_money_transfer(
@@ -459,8 +490,6 @@ async def start_money_transfer(
 
     finally:
         db.close()
-
-
 
 
 def employee_selection_keyboard(employees):
@@ -1134,6 +1163,7 @@ async def start(
     context.user_data.pop("receipt_confirmation", None)
     context.user_data.pop("expense_flow", None)
     context.user_data.pop("money_transfer", None)
+    context.user_data.pop("ops_offset", None)
 
     db = get_db()
 
@@ -1294,7 +1324,7 @@ async def handle_receipt(
 
         return
 
-     # =====================================================
+    # =====================================================
     # ПРОВЕРЯЕМ, ЕСТЬ ЛИ ОЖИДАЮЩИЙ РАСХОД
     # =====================================================
 
@@ -2116,8 +2146,20 @@ async def my_expenses(
 # МОИ ЗАПРОСЫ
 # =========================================================
 
+STATUS_NAMES = {
+    "new": "🟡 Новая",
+    "approved": "🟢 Одобрена",
+    "rejected": "🔴 Отклонена",
+    "completed": "✅ Выполнена",
+    "not_completed": "❌ Не выполнена",
+    "ordered": "🔵 Заказана",
+    "received": "📦 Получена",
+}
+
+
 async def my_purchase_requests(
     update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
     user
 ):
 
@@ -2140,26 +2182,15 @@ async def my_purchase_requests(
         if not requests:
 
             await update.message.reply_text(
-                "📋 У вас пока нет заявок."
+                "📋 У вас пока нет заявок.",
+                reply_markup=employee_keyboard()
             )
 
             return
 
-        status_names = {
-            "new": "🟡 Новая",
-            "approved": "🟢 Одобрена",
-            "ordered": "🔵 Заказана",
-            "received": "📦 Получена",
-            "rejected": "🔴 Отклонена"
-        }
-
-        lines = [
-            "📋 Ваши заявки:\n"
-        ]
-
         for request in requests:
 
-            status = status_names.get(
+            status = STATUS_NAMES.get(
                 request.status,
                 request.status
             )
@@ -2172,15 +2203,56 @@ async def my_purchase_requests(
                 else "—"
             )
 
-            lines.append(
+            amount_text = ""
+            if hasattr(request, "estimated_amount") and request.estimated_amount:
+                amount_text = f"\n💰 Сумма: {float(request.estimated_amount):,.2f} ₽"
+            else:
+                # пробуем взять из items
+                items = (
+                    db.query(PurchaseRequestItem)
+                    .filter(PurchaseRequestItem.request_id == request.id)
+                    .all()
+                )
+                if items:
+                    total = sum(
+                        float(i.quantity or 1) * float(i.estimated_price or 0)
+                        for i in items
+                    )
+                    if total > 0:
+                        amount_text = f"\n💰 Сумма: {total:,.2f} ₽"
+
+            text = (
                 f"📌 {request.number}\n"
-                f"Название: {request.title}\n"
+                f"📝 {request.title}\n"
                 f"Статус: {status}\n"
-                f"Дата: {created_text}\n"
+                f"Дата: {created_text}"
+                f"{amount_text}"
             )
 
+            # Если одобрена — показываем кнопки «Выполнено / Не выполнено»
+            if request.status == "approved":
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "✅ Выполнено",
+                            callback_data=f"pr_done:{request.id}"
+                        ),
+                        InlineKeyboardButton(
+                            "❌ Не выполнено",
+                            callback_data=f"pr_notdone:{request.id}"
+                        ),
+                    ]
+                ])
+                await update.message.reply_text(
+                    text,
+                    reply_markup=keyboard
+                )
+            else:
+                await update.message.reply_text(text)
+
         await update.message.reply_text(
-            "\n".join(lines)
+            "— конец списка —",
+            reply_markup=employee_keyboard()
         )
 
     finally:
@@ -2189,7 +2261,7 @@ async def my_purchase_requests(
 
 
 # =========================================================
-# СОЗДАНИЕ ЗАЯВКИ
+# СОЗДАНИЕ ЗАЯВКИ (упрощённое: сумма + на что)
 # =========================================================
 
 async def start_purchase_request(
@@ -2200,16 +2272,17 @@ async def start_purchase_request(
     context.user_data[
         "purchase_request"
     ] = {
-        "step": "product",
-        "items": []
+        "step": "amount"
     }
 
     await update.message.reply_text(
         "📦 Создание заявки\n\n"
-        "Напишите одним сообщением:\n"
-        "товар, количество и цену за 1 шт.\n\n"
+        "Напишите, сколько денег нужно и на что.\n\n"
         "Пример:\n"
-        "Монитор Samsung, 2 шт, 25000"
+        "15000 на бензин\n"
+        "или\n"
+        "50000 на материалы для ремонта",
+        reply_markup=expense_cancel_keyboard()
     )
 
 
@@ -2228,106 +2301,81 @@ async def handle_purchase_request_step(
     if not data:
         return False
 
-    if data.get("step") != "product":
-        return False
-
-    if not text.strip():
+    if text == "❌ Отмена":
+        context.user_data.pop("purchase_request", None)
         await update.message.reply_text(
-            "❌ Напишите товар, количество и цену.\n\n"
-            "Пример: Монитор Samsung, 2 шт, 25000"
+            "❌ Заявка отменена.",
+            reply_markup=employee_keyboard()
         )
         return True
 
-    # Количество: 2 шт / 2 штук / 2 ед.
-    quantity_match = re.search(
-        r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(?:шт\.?|штук|ед\.?)",
-        text,
-        flags=re.IGNORECASE
-    )
+    step = data.get("step")
 
-    if not quantity_match:
-        await update.message.reply_text(
-            "❌ Не понял количество.\n\n"
-            "Пример: Монитор Samsung, 2 шт, 25000"
+    # ---------- ШАГ: СУММА + НАЗНАЧЕНИЕ (одним сообщением) ----------
+    if step == "amount":
+        amount = extract_amount(text)
+
+        if amount is None or amount <= 0:
+            await update.message.reply_text(
+                "❌ Не понял сумму.\n\n"
+                "Напишите, например:\n"
+                "15000 на бензин",
+                reply_markup=expense_cancel_keyboard()
+            )
+            return True
+
+        # Убираем сумму из текста — остаётся «на что»
+        purpose = text
+        purpose = re.sub(
+            r"(?<!\d)\d+(?:[ \t]\d{3})*(?:[.,]\d{1,2})?",
+            " ",
+            purpose,
         )
+        purpose = re.sub(
+            r"\b(руб(?:\.|лей|ля|ль)?|р\.?|₽)\b",
+            " ",
+            purpose,
+            flags=re.IGNORECASE,
+        )
+        purpose = re.sub(r"\s+", " ", purpose).strip(" ,.-")
+
+        if not purpose:
+            # Сумма есть, но «на что» нет — спрашиваем отдельно
+            data["amount"] = float(amount)
+            data["step"] = "purpose"
+            await update.message.reply_text(
+                f"💰 Сумма: {amount:,.2f} ₽\n\n"
+                "Напишите, на что нужны деньги:",
+                reply_markup=expense_cancel_keyboard()
+            )
+            return True
+
+        data["amount"] = float(amount)
+        data["purpose"] = purpose
+        data["title"] = purpose
+        data["description"] = purpose
+
+        await save_purchase_request(update, context, user)
         return True
 
-    quantity = float(
-        quantity_match.group(1).replace(",", ".")
-    )
-    if quantity <= 0:
-        await update.message.reply_text(
-            "❌ Количество должно быть больше нуля."
-        )
+    # ---------- ШАГ: ТОЛЬКО «НА ЧТО» ----------
+    if step == "purpose":
+        purpose = text.strip()
+        if not purpose:
+            await update.message.reply_text(
+                "❌ Напишите, на что нужны деньги.",
+                reply_markup=expense_cancel_keyboard()
+            )
+            return True
+
+        data["purpose"] = purpose
+        data["title"] = purpose
+        data["description"] = purpose
+
+        await save_purchase_request(update, context, user)
         return True
 
-    # Убираем количество, чтобы найти цену
-    text_wo_qty = re.sub(
-        r",?\s*\d+(?:[.,]\d+)?\s*(?:шт\.?|штук|ед\.?)",
-        " ",
-        text,
-        flags=re.IGNORECASE
-    )
-
-    # Цена: 25000 / 25 000 / 25000₽ / 25000 руб / 25000 р / 25000.50
-    estimated_price = extract_amount(text_wo_qty)
-
-    if estimated_price is None or estimated_price <= 0:
-        await update.message.reply_text(
-            "❌ Не понял цену.\n\n"
-            "Можно писать: 25000, 25000₽, 25000 руб, 25 000 р"
-        )
-        return True
-
-    # Название = всё без количества и без цены/валюты
-    product_name = re.sub(
-        r",?\s*\d+(?:[.,]\d+)?\s*(?:шт\.?|штук|ед\.?)",
-        "",
-        text,
-        flags=re.IGNORECASE
-    )
-    product_name = re.sub(
-        r"(?<!\d)\d+(?:[ \t]\d{3})*(?:[.,]\d{1,2})?"
-        r"\s*(?:₽|руб(?:\.|лей|ля|ль)?|р\.?)?",
-        "",
-        product_name,
-        flags=re.IGNORECASE
-    )
-    product_name = re.sub(r"\s+", " ", product_name).strip(" ,.-")
-
-    if not product_name:
-        await update.message.reply_text(
-            "❌ Не понял название товара.\n\n"
-            "Пример: Монитор Samsung, 2 шт, 25000"
-        )
-        return True
-
-    # Подготавливаем данные для сохранения.
-    data["product_name"] = product_name
-    data["title"] = product_name
-    data["description"] = None
-    data["quantity"] = quantity
-    data["estimated_price"] = estimated_price
-
-    # Внутренние значения для совместимости с существующей моделью.
-    # Пользователь категорию и приоритет не выбирает.
-    data["category"] = "Без категории"
-    data["priority"] = "normal"
-
-    total_price = quantity * estimated_price
-
-    await update.message.reply_text(
-        "✅ Заявка принята!\n\n"
-        f"🛒 Товар: {product_name}\n"
-        f"🔢 Количество: {quantity:g} шт.\n"
-        f"💰 Цена за 1 шт.: {estimated_price:,.2f} ₽\n"
-        f"💵 Общая сумма: {total_price:,.2f} ₽\n\n"
-        "⏳ Сохраняю заявку..."
-    )
-
-    await save_purchase_request(update, context, user)
-
-    return True
+    return False
 
 
 # =========================================================
@@ -2347,6 +2395,9 @@ async def save_purchase_request(
     if not data:
         return
 
+    amount = float(data["amount"])
+    purpose = data.get("purpose") or data.get("title") or "Заявка"
+
     db = get_db()
 
     try:
@@ -2354,64 +2405,32 @@ async def save_purchase_request(
         purchase_request = PurchaseRequest(
             number="TEMP",
             telegram_user_id=user.id,
-            title=data["title"],
-            description=data.get(
-                "description"
-            ),
-            category=data.get(
-                "category"
-            ),
-            priority=data.get(
-                "priority",
-                "normal"
-            ),
+            title=purpose,
+            description=purpose,
+            category="Без категории",
+            priority="normal",
             status="new"
         )
 
-        db.add(
-            purchase_request
-        )
-
+        db.add(purchase_request)
         db.flush()
 
         purchase_request.number = (
             f"З-{purchase_request.id:06d}"
         )
 
-        quantity = float(
-            data["quantity"]
-        )
-
-        estimated_price = float(
-            data["estimated_price"]
-        )
-
-        total_price = (
-            quantity * estimated_price
-        )
-
+        # Сохраняем сумму как один item
         item = PurchaseRequestItem(
             request_id=purchase_request.id,
-            product_name=data["product_name"],
-            quantity=quantity,
+            product_name=purpose,
+            quantity=1,
             unit="шт.",
-            estimated_price=estimated_price
+            estimated_price=amount
         )
 
         db.add(item)
-
         db.commit()
-
-        db.refresh(
-            purchase_request
-        )
-
-        priority_names = {
-            "low": "Низкий",
-            "normal": "Обычный",
-            "high": "Высокий",
-            "urgent": "Срочный"
-        }
+        db.refresh(purchase_request)
 
         # =================================================
         # ОТВЕТ СОТРУДНИКУ
@@ -2420,15 +2439,14 @@ async def save_purchase_request(
         await update.message.reply_text(
             "✅ Заявка создана!\n\n"
             f"📌 Номер: {purchase_request.number}\n"
-            f"🛒 Товар: {data['product_name']}\n"
-            f"🔢 Количество: {quantity:g} шт.\n"
-            f"💰 Цена за 1 шт.: {estimated_price:,.2f} ₽\n"
-            f"💵 Общая сумма: {total_price:,.2f} ₽\n\n"
-            "Заявка отправлена директору."
+            f"💰 Сумма: {amount:,.2f} ₽\n"
+            f"📝 На что: {purpose}\n\n"
+            "Заявка отправлена директору.",
+            reply_markup=employee_keyboard()
         )
 
         # =================================================
-        # УВЕДОМЛЕНИЕ ДИРЕКТОРУ
+        # УВЕДОМЛЕНИЕ ДИРЕКТОРУ С КНОПКАМИ
         # =================================================
 
         if DIRECTOR_TELEGRAM_ID:
@@ -2437,16 +2455,29 @@ async def save_purchase_request(
                 "📦 НОВАЯ ЗАЯВКА\n\n"
                 f"📌 Номер: {purchase_request.number}\n"
                 f"👤 Сотрудник: {user.full_name}\n"
-                f"🛒 Товар: {data['product_name']}\n"
-                f"🔢 Количество: {quantity:g} шт.\n"
-                f"💰 Цена за 1 шт.: {estimated_price:,.2f} ₽\n"
-                f"💵 Общая сумма: {total_price:,.2f} ₽"
+                f"💰 Сумма: {amount:,.2f} ₽\n"
+                f"📝 На что: {purpose}"
             )
+
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "✅ Одобрить",
+                        callback_data=f"pr_approve:{purchase_request.id}"
+                    ),
+                    InlineKeyboardButton(
+                        "❌ Отказать",
+                        callback_data=f"pr_reject:{purchase_request.id}"
+                    ),
+                ]
+            ])
+
             try:
 
                 await context.bot.send_message(
                     chat_id=DIRECTOR_TELEGRAM_ID,
-                    text=notification_text
+                    text=notification_text,
+                    reply_markup=keyboard
                 )
 
             except Exception as error:
@@ -2468,7 +2499,8 @@ async def save_purchase_request(
 
         await update.message.reply_text(
             "❌ Не удалось создать заявку.\n\n"
-            f"Ошибка: {error}"
+            f"Ошибка: {error}",
+            reply_markup=employee_keyboard()
         )
 
     finally:
@@ -2479,6 +2511,229 @@ async def save_purchase_request(
             "purchase_request",
             None
         )
+
+
+# =========================================================
+# CALLBACK: ОДОБРИТЬ / ОТКАЗАТЬ / ВЫПОЛНЕНО
+# =========================================================
+
+async def handle_purchase_request_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    query = update.callback_query
+    if not query:
+        return
+
+    await query.answer()
+
+    data = query.data or ""
+    if ":" not in data:
+        return
+
+    action, raw_id = data.split(":", 1)
+    try:
+        request_id = int(raw_id)
+    except ValueError:
+        return
+
+    db = get_db()
+
+    try:
+        purchase_request = (
+            db.query(PurchaseRequest)
+            .filter(PurchaseRequest.id == request_id)
+            .first()
+        )
+
+        if not purchase_request:
+            await query.edit_message_text("❌ Заявка не найдена.")
+            return
+
+        employee = (
+            db.query(TelegramUser)
+            .filter(TelegramUser.id == purchase_request.telegram_user_id)
+            .first()
+        )
+
+        # Сумма из item
+        item = (
+            db.query(PurchaseRequestItem)
+            .filter(PurchaseRequestItem.request_id == request_id)
+            .first()
+        )
+        amount = float(item.estimated_price) if item and item.estimated_price else 0.0
+        purpose = purchase_request.title or "Заявка"
+
+        # ---------- ОДОБРИТЬ ----------
+        if action == "pr_approve":
+            if purchase_request.status != "new":
+                await query.edit_message_text(
+                    f"⚠️ Заявка {purchase_request.number} уже обработана "
+                    f"(статус: {STATUS_NAMES.get(purchase_request.status, purchase_request.status)})."
+                )
+                return
+
+            if not employee:
+                await query.edit_message_text("❌ Сотрудник не найден.")
+                return
+
+            # Создаём выдачу денег
+            transfer = MoneyTransfer(
+                telegram_user_id=employee.id,
+                amount=amount,
+                purpose=purpose,
+                comment=f"По заявке {purchase_request.number}",
+                status="issued",
+                created_at=date.today()
+            )
+            db.add(transfer)
+
+            purchase_request.status = "approved"
+            db.commit()
+
+            balance = get_employee_balance(db, employee.id)
+
+            await query.edit_message_text(
+                f"✅ Заявка {purchase_request.number} одобрена.\n\n"
+                f"👤 {employee.full_name}\n"
+                f"💰 Выдано: {amount:,.2f} ₽\n"
+                f"📝 {purpose}\n"
+                f"💳 Баланс сотрудника: {balance:,.2f} ₽"
+            )
+
+            # Уведомляем сотрудника
+            try:
+                await context.bot.send_message(
+                    chat_id=employee.telegram_id,
+                    text=(
+                        f"✅ Ваша заявка {purchase_request.number} одобрена!\n\n"
+                        f"💰 Вам выдано: {amount:,.2f} ₽\n"
+                        f"📝 На что: {purpose}\n"
+                        f"💳 Сейчас у вас: {balance:,.2f} ₽\n\n"
+                        "Когда выполните — откройте «📋 Мои запросы» "
+                        "и нажмите «Выполнено»."
+                    ),
+                    reply_markup=employee_keyboard()
+                )
+            except Exception as error:
+                print("Не удалось уведомить сотрудника:", error)
+
+            return
+
+        # ---------- ОТКАЗАТЬ ----------
+        if action == "pr_reject":
+            if purchase_request.status != "new":
+                await query.edit_message_text(
+                    f"⚠️ Заявка {purchase_request.number} уже обработана "
+                    f"(статус: {STATUS_NAMES.get(purchase_request.status, purchase_request.status)})."
+                )
+                return
+
+            purchase_request.status = "rejected"
+            db.commit()
+
+            await query.edit_message_text(
+                f"❌ Заявка {purchase_request.number} отклонена.\n\n"
+                f"👤 {employee.full_name if employee else '—'}\n"
+                f"💰 {amount:,.2f} ₽\n"
+                f"📝 {purpose}"
+            )
+
+            if employee:
+                try:
+                    await context.bot.send_message(
+                        chat_id=employee.telegram_id,
+                        text=(
+                            f"❌ Ваша заявка {purchase_request.number} отклонена.\n\n"
+                            f"💰 Сумма: {amount:,.2f} ₽\n"
+                            f"📝 На что: {purpose}"
+                        ),
+                        reply_markup=employee_keyboard()
+                    )
+                except Exception as error:
+                    print("Не удалось уведомить сотрудника:", error)
+
+            return
+
+        # ---------- ВЫПОЛНЕНО (сотрудник) ----------
+        if action == "pr_done":
+            if purchase_request.status != "approved":
+                await query.edit_message_text(
+                    f"⚠️ Нельзя отметить: статус сейчас "
+                    f"{STATUS_NAMES.get(purchase_request.status, purchase_request.status)}."
+                )
+                return
+
+            purchase_request.status = "completed"
+            db.commit()
+
+            await query.edit_message_text(
+                f"✅ Заявка {purchase_request.number} отмечена как выполненная.\n\n"
+                f"💰 {amount:,.2f} ₽\n"
+                f"📝 {purpose}"
+            )
+
+            if DIRECTOR_TELEGRAM_ID:
+                try:
+                    await context.bot.send_message(
+                        chat_id=DIRECTOR_TELEGRAM_ID,
+                        text=(
+                            f"✅ Заявка {purchase_request.number} выполнена\n\n"
+                            f"👤 {employee.full_name if employee else '—'}\n"
+                            f"💰 {amount:,.2f} ₽\n"
+                            f"📝 {purpose}"
+                        )
+                    )
+                except Exception as error:
+                    print("Не удалось уведомить директора:", error)
+
+            return
+
+        # ---------- НЕ ВЫПОЛНЕНО (сотрудник) ----------
+        if action == "pr_notdone":
+            if purchase_request.status != "approved":
+                await query.edit_message_text(
+                    f"⚠️ Нельзя отметить: статус сейчас "
+                    f"{STATUS_NAMES.get(purchase_request.status, purchase_request.status)}."
+                )
+                return
+
+            purchase_request.status = "not_completed"
+            db.commit()
+
+            await query.edit_message_text(
+                f"❌ Заявка {purchase_request.number} отмечена как не выполненная.\n\n"
+                f"💰 {amount:,.2f} ₽\n"
+                f"📝 {purpose}"
+            )
+
+            if DIRECTOR_TELEGRAM_ID:
+                try:
+                    await context.bot.send_message(
+                        chat_id=DIRECTOR_TELEGRAM_ID,
+                        text=(
+                            f"❌ Заявка {purchase_request.number} НЕ выполнена\n\n"
+                            f"👤 {employee.full_name if employee else '—'}\n"
+                            f"💰 {amount:,.2f} ₽\n"
+                            f"📝 {purpose}"
+                        )
+                    )
+                except Exception as error:
+                    print("Не удалось уведомить директора:", error)
+
+            return
+
+    except Exception as error:
+        db.rollback()
+        print("Ошибка callback заявки:", error)
+        try:
+            await query.edit_message_text("❌ Ошибка обработки заявки.")
+        except Exception:
+            pass
+    finally:
+        db.close()
+
 
 # =========================================================
 # ЗАЯВКИ ДИРЕКТОРА
@@ -2504,22 +2759,11 @@ async def director_purchase_requests(
         if not requests:
 
             await update.message.reply_text(
-                "📦 Новых заявок пока нет."
+                "📦 Новых заявок пока нет.",
+                reply_markup=director_keyboard()
             )
 
             return
-
-        status_names = {
-            "new": "🟡 Новая",
-            "approved": "🟢 Одобрена",
-            "ordered": "🔵 Заказана",
-            "received": "📦 Получена",
-            "rejected": "🔴 Отклонена"
-        }
-
-        lines = [
-            "📦 Последние заявки:\n"
-        ]
 
         for request in requests:
 
@@ -2538,20 +2782,47 @@ async def director_purchase_requests(
                 else "Неизвестный сотрудник"
             )
 
-            status = status_names.get(
+            status = STATUS_NAMES.get(
                 request.status,
                 request.status
             )
 
-            lines.append(
+            item = (
+                db.query(PurchaseRequestItem)
+                .filter(PurchaseRequestItem.request_id == request.id)
+                .first()
+            )
+            amount = float(item.estimated_price) if item and item.estimated_price else 0.0
+
+            text = (
                 f"📌 {request.number}\n"
                 f"👤 {employee_name}\n"
-                f"📦 {request.title}\n"
-                f"{status}\n"
+                f"💰 {amount:,.2f} ₽\n"
+                f"📝 {request.title}\n"
+                f"Статус: {status}"
             )
 
+            # Для новых — кнопки одобрить/отказать
+            if request.status == "new":
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "✅ Одобрить",
+                            callback_data=f"pr_approve:{request.id}"
+                        ),
+                        InlineKeyboardButton(
+                            "❌ Отказать",
+                            callback_data=f"pr_reject:{request.id}"
+                        ),
+                    ]
+                ])
+                await update.message.reply_text(text, reply_markup=keyboard)
+            else:
+                await update.message.reply_text(text)
+
         await update.message.reply_text(
-            "\n".join(lines)
+            "— конец списка —",
+            reply_markup=director_keyboard()
         )
 
     finally:
@@ -2560,46 +2831,135 @@ async def director_purchase_requests(
 
 
 # =========================================================
-# ФИНАНСЫ
+# ИСТОРИЯ ОПЕРАЦИЙ (вместо Чеков)
 # =========================================================
 
-async def director_finances(
-    update: Update
+async def director_operations_history(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    offset: int = 0
 ):
+    PAGE_SIZE = 10
 
     db = get_db()
 
     try:
-
+        # Сортировка по дате (новые сверху), потом по id
         transactions = (
             db.query(Transaction)
+            .order_by(
+                Transaction.date.desc(),
+                Transaction.id.desc()
+            )
+            .offset(offset)
+            .limit(PAGE_SIZE)
             .all()
         )
 
-        income = sum(
-            float(t.amount)
-            for t in transactions
-            if t.type == "income"
-        )
+        total_count = db.query(Transaction).count()
 
-        expense = sum(
-            float(t.amount)
-            for t in transactions
-            if t.type == "expense"
-        )
+        if not transactions and offset == 0:
+            await update.message.reply_text(
+                "📜 Операций пока нет.",
+                reply_markup=director_keyboard()
+            )
+            return
 
-        balance = income - expense
+        if not transactions:
+            await update.message.reply_text(
+                "Больше операций нет.",
+                reply_markup=director_keyboard()
+            )
+            return
 
-        await update.message.reply_text(
-            "💰 Финансы\n\n"
-            f"Доходы: {income:,.2f} ₽\n"
-            f"Расходы: {expense:,.2f} ₽\n"
-            f"Баланс: {balance:,.2f} ₽"
-        )
+        lines = [
+            f"📜 История операций "
+            f"({offset + 1}–{offset + len(transactions)} из {total_count}):\n"
+        ]
+
+        for t in transactions:
+            type_emoji = "💰" if t.type == "income" else "💸"
+            type_name = "Доход" if t.type == "income" else "Расход"
+            date_text = (
+                t.date.strftime("%d.%m.%Y")
+                if t.date
+                else "—"
+            )
+            lines.append(
+                f"{type_emoji} {type_name}: {float(t.amount):,.2f} ₽\n"
+                f"  📂 {t.category or '—'}\n"
+                f"  📝 {t.description or '—'}\n"
+                f"  📅 {date_text}"
+            )
+
+        text = "\n\n".join(lines)
+
+        # Кнопка «Ещё», если есть следующие
+        has_more = (offset + PAGE_SIZE) < total_count
+
+        if has_more:
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "📄 Ещё",
+                        callback_data=f"ops_more:{offset + PAGE_SIZE}"
+                    )
+                ]
+            ])
+            await update.message.reply_text(
+                text,
+                reply_markup=keyboard
+            )
+        else:
+            await update.message.reply_text(
+                text + "\n\n— все операции показаны —",
+                reply_markup=director_keyboard()
+            )
+
+        context.user_data["ops_offset"] = offset
 
     finally:
-
         db.close()
+
+
+async def handle_ops_more_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    query = update.callback_query
+    if not query:
+        return
+
+    await query.answer()
+
+    data = query.data or ""
+    if not data.startswith("ops_more:"):
+        return
+
+    try:
+        offset = int(data.split(":", 1)[1])
+    except ValueError:
+        return
+
+    # Отправляем следующее сообщение (не edit — удобнее для истории)
+    # Создаём фейковый update с message для reply
+    class FakeMessage:
+        def __init__(self, chat_id, bot):
+            self.chat_id = chat_id
+            self._bot = bot
+
+        async def reply_text(self, text, reply_markup=None):
+            await self._bot.send_message(
+                chat_id=self.chat_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+
+    fake_update = type("obj", (object,), {
+        "message": FakeMessage(query.message.chat_id, context.bot)
+    })()
+
+    await director_operations_history(fake_update, context, offset=offset)
 
 
 # =========================================================
@@ -2626,7 +2986,8 @@ async def director_money_transfers(
         if not transfers:
 
             await update.message.reply_text(
-                "💳 Выданных денег пока нет."
+                "💳 Выданных денег пока нет.",
+                reply_markup=director_keyboard()
             )
 
             return
@@ -2692,7 +3053,8 @@ async def director_money_transfers(
             )
 
         await update.message.reply_text(
-            "\n".join(lines)
+            "\n".join(lines),
+            reply_markup=director_keyboard()
         )
 
     finally:
@@ -2738,11 +3100,13 @@ async def director_employees(
         ]
 
         for employee in employees:
-            balance = get_employee_balance(db, employee.id)
+            issued, spent = get_employee_issued_spent(db, employee.id)
+            balance = max(issued - spent, 0.0)
             lines.append(
                 f"• {employee.full_name}\n"
-                f"  ID: {employee.telegram_id}\n"
-                f"  💳 Баланс: {balance:,.2f} ₽"
+                f"  💰 Выдано: {issued:,.2f} ₽\n"
+                f"  💸 Потрачено: {spent:,.2f} ₽\n"
+                f"  💳 Остаток: {balance:,.2f} ₽"
             )
 
         lines.append(
@@ -3036,7 +3400,8 @@ async def handle_director_text(
                 "🧾 После покупки сотрудник "
                 "должен отправить чек.\n\n"
                 "Операция расхода будет создана "
-                "после получения чека."
+                "после получения чека.",
+                reply_markup=director_keyboard()
             )
 
         except Exception as error:
@@ -3127,7 +3492,8 @@ async def handle_director_text(
             "✅ Доход записан\n\n"
             f"💰 Сумма: "
             f"{amount:,.2f} ₽\n"
-            f"📝 {text}"
+            f"📝 {text}",
+            reply_markup=director_keyboard()
         )
 
         return
@@ -3209,7 +3575,8 @@ async def handle_director_text(
             f"{amount:,.2f} ₽\n"
             f"📂 Категория: "
             f"{category}\n"
-            f"📝 {text}"
+            f"📝 {text}",
+            reply_markup=director_keyboard()
         )
 
         return
@@ -3229,7 +3596,8 @@ async def handle_director_text(
         "💸 Купить напрямую:\n"
         "купил принтер 35000\n\n"
         "💰 Доход:\n"
-        "пришло 500000 от клиента"
+        "пришло 500000 от клиента",
+        reply_markup=director_keyboard()
     )
 
 # =========================================================
@@ -3335,10 +3703,6 @@ async def handle_receipt_confirmation(
 # ОБРАБОТКА СУММЫ НЕРАСПОЗНАННОГО ЧЕКА
 # =========================================================
 
-# =========================================================
-# ОБРАБОТКА СУММЫ НЕРАСПОЗНАННОГО ЧЕКА
-# =========================================================
-
 async def handle_waiting_receipt_amount(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -3406,10 +3770,6 @@ async def handle_waiting_receipt_amount(
     )
 
     return True
-
-# =========================================================
-# СОЗДАНИЕ ЗАЯВКИ / ТЕКСТОВЫЕ СООБЩЕНИЯ
-# =========================================================
 
 # =========================================================
 # ОСНОВНАЯ ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
@@ -3610,26 +3970,6 @@ async def handle_text(
             return
 
     # =====================================================
-    # ГЛАВНОЕ МЕНЮ
-    # =====================================================
-
-    if text == "🏠 Главное меню":
-
-        context.user_data.pop("purchase_request", None)
-        context.user_data.pop("waiting_receipt_amount", None)
-        context.user_data.pop("expense_flow", None)
-        context.user_data.pop("pending_expense", None)
-        context.user_data.pop("receipt_confirmation", None)
-        context.user_data.pop("money_transfer", None)
-
-        await show_main_menu(
-            update,
-            user
-        )
-
-        return
-
-    # =====================================================
     # СОТРУДНИК
     # =====================================================
 
@@ -3714,6 +4054,7 @@ async def handle_text(
 
             await my_purchase_requests(
                 update,
+                context,
                 user
             )
 
@@ -3819,18 +4160,6 @@ async def handle_text(
             return
 
         # -------------------------------------------------
-        # ФИНАНСЫ
-        # -------------------------------------------------
-
-        if text == "💰 Финансы":
-
-            await director_finances(
-                update
-            )
-
-            return
-
-        # -------------------------------------------------
         # ЗАЯВКИ
         # -------------------------------------------------
 
@@ -3843,75 +4172,16 @@ async def handle_text(
             return
 
         # -------------------------------------------------
-        # ЧЕКИ
+        # ИСТОРИЯ ОПЕРАЦИЙ
         # -------------------------------------------------
 
-        if text == "🧾 Чеки":
+        if text == "📜 История операций":
 
-            db = get_db()
-
-            try:
-
-                receipts = (
-                    db.query(Receipt)
-                    .order_by(
-                        Receipt.id.desc()
-                    )
-                    .limit(10)
-                    .all()
-                )
-
-                if not receipts:
-
-                    await update.message.reply_text(
-                        "🧾 Чеков пока нет."
-                    )
-
-                    return
-
-                lines = [
-                    "🧾 Последние чеки:\n"
-                ]
-
-                for receipt in receipts:
-
-                    employee = (
-                        db.query(TelegramUser)
-                        .filter(
-                            TelegramUser.telegram_id
-                            == receipt.telegram_user_id
-                        )
-                        .first()
-                    )
-
-                    employee_name = (
-                        employee.full_name
-                        if employee
-                        else "Неизвестный сотрудник"
-                    )
-
-                    amount_text = (
-                        f"{receipt.receipt_amount:,.2f} ₽"
-                        if receipt.receipt_amount
-                        is not None
-                        else "Сумма не указана"
-                    )
-
-                    lines.append(
-                        f"🧾 #{receipt.id}\n"
-                        f"👤 {employee_name}\n"
-                        f"🏪 {receipt.shop_name or 'Не определён'}\n"
-                        f"💰 {amount_text}\n"
-                        f"📄 {receipt.filename}\n"
-                    )
-
-                await update.message.reply_text(
-                    "\n".join(lines)
-                )
-
-            finally:
-
-                db.close()
+            await director_operations_history(
+                update,
+                context,
+                offset=0
+            )
 
             return
 
@@ -3986,14 +4256,14 @@ async def show_main_menu(
     if user.role == "director":
 
         text = (
-            "👑 Главное меню директора\n\n"
+            "👑 Меню директора\n\n"
             "Выберите нужный раздел:"
         )
 
     else:
 
         text = (
-            "👤 Главное меню сотрудника\n\n"
+            "👤 Меню сотрудника\n\n"
             "Выберите нужный раздел:"
         )
 
@@ -4304,7 +4574,6 @@ async def handle_employee_text(
     """
     Сотрудник пишет сумму и назначение (например: «Потратил 3500 на бензин»).
     Деньги берутся с общего баланса (выданные директором суммы).
-    Transaction создаётся только после подтверждения чеком.
     """
     telegram_user = update.effective_user
 
@@ -4325,7 +4594,6 @@ async def handle_employee_text(
         "📦 Создать запрос",
         "📋 Мои запросы",
         "👤 Мой профиль",
-        "🏠 Главное меню",
     }
     if text in menu_buttons:
         return
@@ -4337,7 +4605,8 @@ async def handle_employee_text(
             "❌ Не удалось определить сумму расхода.\n\n"
             "Напишите, например:\n"
             "Потратил 3500 на бензин\n\n"
-            "Или нажмите кнопку «💸 Сообщить о расходе»."
+            "Или нажмите кнопку «💸 Сообщить о расходе».",
+            reply_markup=employee_keyboard()
         )
         return
 
@@ -4420,6 +4689,8 @@ async def handle_employee_text(
         )
     finally:
         db.close()
+
+
 # =========================================================
 # СВОДКА
 # =========================================================
@@ -4501,7 +4772,8 @@ async def summary(
         f"💸 Расходы: "
         f"{expense:,.2f} ₽\n"
         f"💵 Баланс: "
-        f"{balance:,.2f} ₽"
+        f"{balance:,.2f} ₽",
+        reply_markup=director_keyboard()
     )
 
 
@@ -4665,6 +4937,24 @@ def main():
         CommandHandler(
             "summary",
             summary
+        )
+    )
+
+    # =====================================================
+    # CALLBACK (кнопки заявок + «Ещё» в истории)
+    # =====================================================
+
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_purchase_request_callback,
+            pattern=r"^pr_(approve|reject|done|notdone):"
+        )
+    )
+
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_ops_more_callback,
+            pattern=r"^ops_more:"
         )
     )
 

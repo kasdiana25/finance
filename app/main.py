@@ -1,5 +1,6 @@
 import io
 from pathlib import Path
+import os
 
 from fastapi.responses import StreamingResponse
 from reportlab.lib import colors
@@ -1175,6 +1176,48 @@ def change_employee_role(
 
 
 # =========================================================
+# WEEKLY GOALS
+# =========================================================
+
+@app.get(
+    "/api/weekly-goal",
+    response_model=schemas.WeeklyGoalResponse
+)
+def get_weekly_goal_api(
+    week_start: str,
+    db: Session = Depends(get_db)
+):
+    from datetime import date as date_type
+
+    goal = crud.get_weekly_goal(
+        db,
+        date_type.fromisoformat(week_start)
+    )
+
+    if goal is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Цель на эту неделю не задана"
+        )
+
+    return goal
+
+
+@app.post(
+    "/api/weekly-goal",
+    response_model=schemas.WeeklyGoalResponse
+)
+def save_weekly_goal_api(
+    goal: schemas.WeeklyGoalCreate,
+    db: Session = Depends(get_db)
+):
+    return crud.create_or_update_weekly_goal(
+        db,
+        goal
+    )
+
+
+# =========================================================
 # REPORTS
 # =========================================================
 
@@ -1232,31 +1275,34 @@ def reports_page(
 
 def register_pdf_fonts():
     regular = Path(
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        os.path.expandvars(
+            r"%LOCALAPPDATA%\Microsoft\Windows\Fonts\DejaVuSans.ttf"
+        )
     )
 
     bold = Path(
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        os.path.expandvars(
+            r"%LOCALAPPDATA%\Microsoft\Windows\Fonts\DejaVuSans-Bold.ttf"
+        )
     )
 
     if not regular.exists():
         raise FileNotFoundError(
-            f"Не найден шрифт DejaVuSans: {regular}"
+            f"Не найден шрифт: {regular}"
+        )
+
+    if not bold.exists():
+        raise FileNotFoundError(
+            f"Не найден шрифт: {bold}"
         )
 
     pdfmetrics.registerFont(
         TTFont("DejaVuSans", str(regular))
     )
 
-    if bold.exists():
-        pdfmetrics.registerFont(
-            TTFont("DejaVuSans-Bold", str(bold))
-        )
-    else:
-        pdfmetrics.registerFont(
-            TTFont("DejaVuSans-Bold", str(regular))
-        )
-
+    pdfmetrics.registerFont(
+        TTFont("DejaVuSans-Bold", str(bold))
+    )
 
 
 @app.get("/reports/pdf")
@@ -1267,11 +1313,26 @@ def reports_pdf(
     db: Session = Depends(get_db)
 ):
     from datetime import date
+    from io import BytesIO
+    from collections import defaultdict
 
-    # -----------------------------------------
-    # Обрабатываем произвольный период
-    # -----------------------------------------
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle,
+    )
 
+    # ---------------------------------------------------------
+    # Период
+    # ---------------------------------------------------------
     custom_from = None
     custom_to = None
 
@@ -1282,14 +1343,9 @@ def reports_pdf(
 
             if date_to:
                 custom_to = date.fromisoformat(date_to)
-
         except ValueError:
             custom_from = None
             custom_to = None
-
-    # -----------------------------------------
-    # Получаем данные отчёта
-    # -----------------------------------------
 
     report = get_financial_report(
         db=db,
@@ -1298,626 +1354,856 @@ def reports_pdf(
         date_to=custom_to
     )
 
-    # -----------------------------------------
-    # Подключаем шрифты
-    # -----------------------------------------
+    # ---------------------------------------------------------
+    # Вспомогательные функции
+    # ---------------------------------------------------------
+    def safe_text(value):
+        if value is None:
+            return ""
 
+        return (
+            str(value)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    def money(value):
+        try:
+            value = float(value or 0)
+        except (TypeError, ValueError):
+            value = 0
+
+        return f"{value:,.2f}".replace(",", " ").replace(".", ",") + " ₽"
+
+    def num(value):
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def get_value(obj, key, default=0):
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+
+        return getattr(obj, key, default)
+
+    # ---------------------------------------------------------
+    # Данные отчёта
+    # ---------------------------------------------------------
+    income = num(report.get("income", 0))
+    expense = num(report.get("expense", 0))
+    balance = num(report.get("balance", income - expense))
+
+    income_by_source = report.get("income_by_source", {}) or {}
+
+    investment = num(
+        income_by_source.get("investment", 0)
+    )
+
+    show = num(
+        income_by_source.get("show", 0)
+    )
+
+    income_by_account = report.get("income_by_account", {}) or {}
+    expense_by_account = report.get("expense_by_account", {}) or {}
+
+    cash_income = num(
+        income_by_account.get("cash", 0)
+    )
+
+    bank_income = num(
+        income_by_account.get("bank_account", 0)
+    )
+
+    cash_expense = num(
+        expense_by_account.get("cash", 0)
+    )
+
+    bank_expense = num(
+        expense_by_account.get("bank_account", 0)
+    )
+
+    # ---------------------------------------------------------
+    # Балансы счетов
+    # ---------------------------------------------------------
+    account_balances = report.get("account_balances", {}) or {}
+
+    cash_balance = num(
+        account_balances.get(
+            "cash",
+            cash_income - cash_expense
+        )
+    )
+
+    bank_balance = num(
+        account_balances.get(
+            "bank_account",
+            bank_income - bank_expense
+        )
+    )
+
+    # ---------------------------------------------------------
+    # Зарплата
+    # ---------------------------------------------------------
+    salary_entries = report.get("salary_entries", []) or []
+
+    salary_total = num(
+        report.get("salary_total", 0)
+    )
+
+    # ---------------------------------------------------------
+    # Обычные выданные деньги
+    #
+    # ВАЖНО:
+    # сюда НЕ попадает категория "Заработная плата"
+    # ---------------------------------------------------------
+    issued_by_person = defaultdict(float)
+
+    # ---------------------------------------------------------
+    # Расходы по категориям
+    # ---------------------------------------------------------
+    expense_by_category = report.get(
+        "expense_by_category",
+        {}
+    ) or {}
+
+    # ---------------------------------------------------------
+    # Количество операций
+    # ---------------------------------------------------------
+    transactions = report.get("transactions", []) or []
+
+    total_operations = len(transactions)
+
+    income_operations = 0
+    expense_operations = 0
+
+    for transaction in transactions:
+        transaction_type = get_value(
+            transaction,
+            "type",
+            ""
+        )
+
+        if transaction_type == "income":
+            income_operations += 1
+
+        elif transaction_type == "expense":
+            expense_operations += 1
+
+        # Выданные деньги без зарплаты
+        if transaction_type == "expense":
+            category = get_value(
+                transaction,
+                "category",
+                ""
+            )
+
+            if category != "Заработная плата":
+                paid_to = get_value(
+                    transaction,
+                    "paid_to",
+                    ""
+                )
+
+                amount = num(
+                    get_value(
+                        transaction,
+                        "amount",
+                        0
+                    )
+                )
+
+                if paid_to:
+                    issued_by_person[
+                        str(paid_to).strip()
+                    ] += amount
+
+    # ---------------------------------------------------------
+    # Если transactions отсутствует или пуст,
+    # пробуем использовать salary_entries только для зарплаты.
+    # ---------------------------------------------------------
+    if not salary_entries:
+        salary_entries = []
+
+    # ---------------------------------------------------------
+    # Цель недели
+    # ---------------------------------------------------------
+    weekly_goal = report.get(
+        "weekly_goal"
+    )
+
+    goal_value = 0
+    goal_result = income
+
+    if weekly_goal:
+        goal_value = num(
+            get_value(
+                weekly_goal,
+                "target_income",
+                0
+            )
+        )
+
+        goal_result = num(
+            get_value(
+                weekly_goal,
+                "result_income",
+                income
+            )
+        )
+
+    # ---------------------------------------------------------
+    # Даты отчёта
+    # ---------------------------------------------------------
+    start_date = report.get("start_date")
+    end_date = report.get("end_date")
+
+    if start_date and end_date:
+        period_text = (
+            f"{safe_text(start_date)} — "
+            f"{safe_text(end_date)}"
+        )
+    elif custom_from and custom_to:
+        period_text = (
+            f"{custom_from.strftime('%d.%m.%Y')} — "
+            f"{custom_to.strftime('%d.%m.%Y')}"
+        )
+    else:
+        period_text = "Выбранный период"
+
+    # ---------------------------------------------------------
+    # Шрифты
+    # ---------------------------------------------------------
     register_pdf_fonts()
 
-    # -----------------------------------------
-    # Создаём PDF в памяти
-    # -----------------------------------------
+    normal_font = "DejaVuSans"
+    bold_font = "DejaVuSans-Bold"
 
-    buffer = io.BytesIO()
+    # ---------------------------------------------------------
+    # PDF
+    # ---------------------------------------------------------
+    buffer = BytesIO()
 
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=15 * mm,
-        leftMargin=15 * mm,
-        topMargin=15 * mm,
-        bottomMargin=15 * mm,
+        rightMargin=12 * mm,
+        leftMargin=12 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
         title="Финансовый отчёт",
-        author="Finance Max Alice"
+        author="Finance"
     )
-
-    # -----------------------------------------
-    # Стили
-    # -----------------------------------------
 
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle(
-        "TitleCustom",
+        "PDFTitle",
         parent=styles["Title"],
-        fontName="Arial-Bold",
-        fontSize=20,
-        leading=24,
+        fontName=bold_font,
+        fontSize=17,
+        leading=20,
         alignment=TA_CENTER,
-        spaceAfter=8 * mm,
+        spaceAfter=3 * mm,
     )
 
-    subtitle_style = ParagraphStyle(
-        "SubtitleCustom",
+    period_style = ParagraphStyle(
+        "PDFPeriod",
         parent=styles["Normal"],
-        fontName="Arial",
-        fontSize=10,
-        leading=14,
-        alignment=TA_CENTER,
-        spaceAfter=8 * mm,
-    )
-
-    heading_style = ParagraphStyle(
-        "HeadingCustom",
-        parent=styles["Heading2"],
-        fontName="Arial-Bold",
-        fontSize=13,
-        leading=16,
-        spaceBefore=6 * mm,
-        spaceAfter=4 * mm,
-    )
-
-    normal_style = ParagraphStyle(
-        "NormalCustom",
-        parent=styles["Normal"],
-        fontName="Arial",
-        fontSize=9,
-        leading=12,
-    )
-
-    small_style = ParagraphStyle(
-        "SmallCustom",
-        parent=styles["Normal"],
-        fontName="Arial",
-        fontSize=8,
+        fontName=normal_font,
+        fontSize=8.5,
         leading=10,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#555555"),
+        spaceAfter=5 * mm,
     )
 
-    # -----------------------------------------
-    # Содержимое PDF
-    # -----------------------------------------
+    section_style = ParagraphStyle(
+        "PDFSection",
+        parent=styles["Heading2"],
+        fontName=bold_font,
+        fontSize=10.5,
+        leading=12,
+        textColor=colors.HexColor("#222222"),
+        spaceBefore=3 * mm,
+        spaceAfter=2 * mm,
+    )
 
-    elements = []
+    cell_style = ParagraphStyle(
+        "PDFCell",
+        parent=styles["Normal"],
+        fontName=normal_font,
+        fontSize=7.7,
+        leading=9,
+    )
 
-    # Название
-    elements.append(
+    cell_bold_style = ParagraphStyle(
+        "PDFCellBold",
+        parent=cell_style,
+        fontName=bold_font,
+    )
+
+    right_cell_style = ParagraphStyle(
+        "PDFRight",
+        parent=cell_style,
+        alignment=TA_RIGHT,
+    )
+
+    right_bold_style = ParagraphStyle(
+        "PDFRightBold",
+        parent=right_cell_style,
+        fontName=bold_font,
+    )
+
+    # ---------------------------------------------------------
+    # Стили таблиц
+    # ---------------------------------------------------------
+    header_bg = colors.HexColor("#E9EEF5")
+    total_bg = colors.HexColor("#F1F3F5")
+    border_color = colors.HexColor("#C8CDD3")
+
+    def P(text, bold=False, right=False):
+        if bold and right:
+            style = right_bold_style
+        elif bold:
+            style = cell_bold_style
+        elif right:
+            style = right_cell_style
+        else:
+            style = cell_style
+
+        return Paragraph(
+            safe_text(text),
+            style
+        )
+
+    def make_table(
+        data,
+        widths,
+        header=True,
+        total_rows=None
+    ):
+        table = Table(
+            data,
+            colWidths=widths,
+            repeatRows=1 if header else 0,
+            hAlign="LEFT"
+        )
+
+        commands = [
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.4,
+                border_color
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "MIDDLE"
+            ),
+            (
+                "LEFTPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+            (
+                "RIGHTPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            ),
+        ]
+
+        if header:
+            commands.extend([
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    header_bg
+                ),
+                (
+                    "FONTNAME",
+                    (0, 0),
+                    (-1, 0),
+                    bold_font
+                ),
+            ])
+
+        if total_rows:
+            for row_index in total_rows:
+                commands.extend([
+                    (
+                        "BACKGROUND",
+                        (0, row_index),
+                        (-1, row_index),
+                        total_bg
+                    ),
+                    (
+                        "FONTNAME",
+                        (0, row_index),
+                        (-1, row_index),
+                        bold_font
+                    ),
+                ])
+
+        table.setStyle(
+            TableStyle(commands)
+        )
+
+        return table
+
+    story = []
+
+    # =========================================================
+    # ЗАГОЛОВОК
+    # =========================================================
+    story.append(
         Paragraph(
             "ФИНАНСОВЫЙ ОТЧЁТ",
             title_style
         )
     )
 
-    # Период
-    date_from_report = report.get("date_from")
-    date_to_report = report.get("date_to")
-
-    if date_from_report and date_to_report:
-
-        period_text = (
-            f"Период: "
-            f"{date_from_report.strftime('%d.%m.%Y')} — "
-            f"{date_to_report.strftime('%d.%m.%Y')}"
-        )
-
-    else:
-
-        period_text = f"Период: {period}"
-
-    elements.append(
+    story.append(
         Paragraph(
-            period_text,
-            subtitle_style
+            f"Период: {period_text}",
+            period_style
         )
     )
 
-    # -----------------------------------------
-    # Основные показатели
-    # -----------------------------------------
-
-    elements.append(
+    # =========================================================
+    # 1. ФИНАНСОВЫЙ ИТОГ
+    # =========================================================
+    story.append(
         Paragraph(
-            "Основные финансовые показатели",
-            heading_style
+            "1. Финансовый итог",
+            section_style
         )
     )
 
-    income = float(report.get("income", 0) or 0)
-    expense = float(report.get("expense", 0) or 0)
-    balance = float(report.get("balance", 0) or 0)
-
-    finance_data = [
+    financial_table = [
         [
-            Paragraph("<b>Доходы</b>", normal_style),
-            Paragraph(
-                f"{income:,.2f} ₽".replace(",", " "),
-                normal_style
-            ),
+            P("Показатель", True),
+            P("Сумма", True, True)
         ],
         [
-            Paragraph("<b>Расходы</b>", normal_style),
-            Paragraph(
-                f"{expense:,.2f} ₽".replace(",", " "),
-                normal_style
-            ),
+            P("Доход"),
+            P(money(income), False, True)
         ],
         [
-            Paragraph("<b>Чистый результат</b>", normal_style),
-            Paragraph(
-                f"{balance:,.2f} ₽".replace(",", " "),
-                normal_style
-            ),
+            P("Расход"),
+            P(money(expense), False, True)
+        ],
+        [
+            P("Остаток", True),
+            P(money(balance), True, True)
         ],
     ]
 
-    finance_table = Table(
-        finance_data,
-        colWidths=[
-            90 * mm,
-            80 * mm
-        ]
-    )
-
-    finance_table.setStyle(
-        TableStyle([
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                colors.grey
-            ),
-            (
-                "BACKGROUND",
-                (0, 0),
-                (0, -1),
-                colors.whitesmoke
-            ),
-            (
-                "ALIGN",
-                (1, 0),
-                (1, -1),
-                "RIGHT"
-            ),
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                6
-            ),
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                6
-            ),
-        ])
-    )
-
-    elements.append(finance_table)
-
-    # -----------------------------------------
-    # Краткая статистика
-    # -----------------------------------------
-
-    elements.append(
-        Paragraph(
-            "Краткая статистика",
-            heading_style
+    story.append(
+        make_table(
+            financial_table,
+            [120 * mm, 55 * mm],
+            total_rows=[3]
         )
     )
 
-    statistics_data = [
+        # =========================================================
+    # 2. ДОХОДЫ И ДЕНЬГИ ПО СЧЕТАМ
+    # =========================================================
+    story.append(
+        Paragraph(
+            "2. Доходы и деньги по счетам",
+            section_style
+        )
+    )
+
+    accounts_table = [
         [
-            Paragraph("<b>Показатель</b>", normal_style),
-            Paragraph("<b>Значение</b>", normal_style),
+            P("Показатель", True),
+            P("Доход", True, True),
+            P("Расход", True, True),
+            P("Остаток", True, True),
         ],
+
         [
-            Paragraph("Количество операций", normal_style),
-            Paragraph(
-                str(report.get("transaction_count", 0)),
-                normal_style
-            ),
+            P("Инвестиции"),
+            P(money(investment), False, True),
+            P("—", False, True),
+            P("—", False, True),
         ],
+
         [
-            Paragraph("Выдано сотрудникам", normal_style),
-            Paragraph(
-                f"{float(report.get('transfer_total', 0) or 0):,.2f} ₽"
-                .replace(",", " "),
-                normal_style
-            ),
+            P("Показы"),
+            P(money(show), False, True),
+            P("—", False, True),
+            P("—", False, True),
         ],
+
         [
-            Paragraph("Количество выдач", normal_style),
-            Paragraph(
-                str(report.get("transfer_count", 0)),
-                normal_style
-            ),
+            P("Наличные"),
+            P(money(cash_income), False, True),
+            P(money(cash_expense), False, True),
+            P(money(cash_balance), True, True),
         ],
+
         [
-            Paragraph("Количество чеков", normal_style),
-            Paragraph(
-                str(report.get("receipt_count", 0)),
-                normal_style
-            ),
-        ],
-        [
-            Paragraph("Заявки на закупку", normal_style),
-            Paragraph(
-                str(report.get("purchase_request_count", 0)),
-                normal_style
-            ),
+            P("Расчётный счёт"),
+            P(money(bank_income), False, True),
+            P(money(bank_expense), False, True),
+            P(money(bank_balance), True, True),
         ],
     ]
 
-    statistics_table = Table(
-        statistics_data,
+    # Более компактная таблица, чтобы гарантированно
+    # помещалась в ширину A4
+    accounts_table_obj = Table(
+        accounts_table,
         colWidths=[
-            90 * mm,
-            80 * mm
-        ]
-    )
-
-    statistics_table.setStyle(
-        TableStyle([
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                colors.grey
-            ),
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, 0),
-                colors.whitesmoke
-            ),
-            (
-                "ALIGN",
-                (1, 1),
-                (1, -1),
-                "RIGHT"
-            ),
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            ),
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            ),
-        ])
-    )
-
-    elements.append(statistics_table)
-
-    # -----------------------------------------
-    # Расходы по категориям
-    # -----------------------------------------
-
-    elements.append(
-        Paragraph(
-            "Расходы по категориям",
-            heading_style
-        )
-    )
-
-    categories = {}
-
-    transactions = report.get("transactions", [])
-
-    for transaction in transactions:
-
-        transaction_type = getattr(
-            transaction,
-            "type",
-            None
-        )
-
-        if transaction_type != "expense":
-            continue
-
-        category = getattr(
-            transaction,
-            "category",
-            None
-        ) or "Без категории"
-
-        amount = float(
-            getattr(
-                transaction,
-                "amount",
-                0
-            ) or 0
-        )
-
-        categories[category] = (
-            categories.get(category, 0) + amount
-        )
-
-    category_data = [
-        [
-            Paragraph("<b>Категория</b>", small_style),
-            Paragraph("<b>Сумма</b>", small_style),
-            Paragraph("<b>Доля</b>", small_style),
-        ]
-    ]
-
-    for category, amount in categories.items():
-
-        if expense > 0:
-            percent = amount / expense * 100
-        else:
-            percent = 0
-
-        category_data.append([
-            Paragraph(
-                str(category),
-                small_style
-            ),
-            Paragraph(
-                f"{amount:,.2f} ₽".replace(",", " "),
-                small_style
-            ),
-            Paragraph(
-                f"{percent:.1f}%",
-                small_style
-            ),
-        ])
-
-    if not categories:
-
-        category_data.append([
-            Paragraph(
-                "Расходов за выбранный период нет.",
-                small_style
-            ),
-            "",
-            "",
-        ])
-
-    category_table = Table(
-        category_data,
-        colWidths=[
-            80 * mm,
-            55 * mm,
-            35 * mm
-        ],
-        repeatRows=1
-    )
-
-    category_table.setStyle(
-        TableStyle([
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                colors.grey
-            ),
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, 0),
-                colors.whitesmoke
-            ),
-            (
-                "ALIGN",
-                (1, 1),
-                (-1, -1),
-                "RIGHT"
-            ),
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            ),
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            ),
-        ])
-    )
-
-    elements.append(category_table)
-
-    # -----------------------------------------
-    # Операции
-    # -----------------------------------------
-
-    elements.append(
-        Paragraph(
-            "Операции за период",
-            heading_style
-        )
-    )
-
-    transaction_data = [
-        [
-            Paragraph("<b>Дата</b>", small_style),
-            Paragraph("<b>Тип</b>", small_style),
-            Paragraph("<b>Категория</b>", small_style),
-            Paragraph("<b>Сумма</b>", small_style),
-            Paragraph("<b>Описание</b>", small_style),
-        ]
-    ]
-
-    for transaction in transactions:
-
-        transaction_date = getattr(
-            transaction,
-            "date",
-            ""
-        )
-
-        transaction_type = getattr(
-            transaction,
-            "type",
-            ""
-        )
-
-        category = getattr(
-            transaction,
-            "category",
-            ""
-        ) or "—"
-
-        amount = float(
-            getattr(
-                transaction,
-                "amount",
-                0
-            ) or 0
-        )
-
-        description = getattr(
-            transaction,
-            "description",
-            None
-        ) or "—"
-
-        if transaction_type == "income":
-            type_text = "Доход"
-            amount_text = f"+{amount:,.2f} ₽".replace(",", " ")
-        else:
-            type_text = "Расход"
-            amount_text = f"-{amount:,.2f} ₽".replace(",", " ")
-
-        if hasattr(transaction_date, "strftime"):
-            date_text = transaction_date.strftime(
-                "%d.%m.%Y"
-            )
-        else:
-            date_text = str(transaction_date)
-
-        transaction_data.append([
-            Paragraph(
-                date_text,
-                small_style
-            ),
-            Paragraph(
-                type_text,
-                small_style
-            ),
-            Paragraph(
-                str(category),
-                small_style
-            ),
-            Paragraph(
-                amount_text,
-                small_style
-            ),
-            Paragraph(
-                str(description),
-                small_style
-            ),
-        ])
-
-    if not transactions:
-
-        transaction_data.append([
-            Paragraph(
-                "Операций за выбранный период нет.",
-                small_style
-            ),
-            "",
-            "",
-            "",
-            "",
-        ])
-
-    transaction_table = Table(
-        transaction_data,
-        colWidths=[
-            25 * mm,
-            22 * mm,
-            35 * mm,
-            30 * mm,
             58 * mm,
+            40 * mm,
+            40 * mm,
+            40 * mm,
         ],
-        repeatRows=1
+        hAlign="LEFT"
     )
 
-    transaction_table.setStyle(
+    accounts_table_obj.setStyle(
         TableStyle([
             (
                 "GRID",
                 (0, 0),
                 (-1, -1),
                 0.4,
-                colors.grey
+                border_color
             ),
             (
                 "BACKGROUND",
                 (0, 0),
                 (-1, 0),
-                colors.whitesmoke
+                header_bg
+            ),
+            (
+                "FONTNAME",
+                (0, 0),
+                (-1, 0),
+                bold_font
             ),
             (
                 "VALIGN",
                 (0, 0),
                 (-1, -1),
-                "TOP"
+                "MIDDLE"
             ),
             (
-                "ALIGN",
-                (3, 1),
-                (3, -1),
-                "RIGHT"
+                "LEFTPADDING",
+                (0, 0),
+                (-1, -1),
+                3
+            ),
+            (
+                "RIGHTPADDING",
+                (0, 0),
+                (-1, -1),
+                3
             ),
             (
                 "TOPPADDING",
                 (0, 0),
                 (-1, -1),
-                4
+                3
             ),
             (
                 "BOTTOMPADDING",
                 (0, 0),
                 (-1, -1),
-                4
+                3
             ),
         ])
     )
 
-    elements.append(transaction_table)
+    story.append(accounts_table_obj) 
+    # =========================================================
+    # 3. ВЫДАННЫЕ ДЕНЬГИ БЕЗ ЗАРПЛАТЫ
+    # =========================================================
+    story.append(
+        Paragraph(
+            "3. Выданные деньги без зарплаты",
+            section_style
+        )
+    )
 
-    # -----------------------------------------
-    # Формируем PDF
-    # -----------------------------------------
+    issued_table = [
+        [
+            P("Кому выдано", True),
+            P("Выдано", True, True),
+            P("Потрачено без ЗП", True, True),
+        ]
+    ]
 
-    doc.build(elements)
+    total_issued = 0
+    total_spent_without_salary = 0
+
+    # ---------------------------------------------------------
+    # Здесь считаем:
+    # "Выдано" = сумма операций этому получателю
+    # "Потрачено без ЗП" = сумма обычных расходов.
+    #
+    # Если у получателя нет отдельного поля "выдано/потрачено",
+    # обе суммы будут одинаковыми, потому что текущая модель
+    # хранит саму операцию расхода.
+    # ---------------------------------------------------------
+    for person, amount in sorted(
+        issued_by_person.items(),
+        key=lambda x: x[0].lower()
+    ):
+        amount = num(amount)
+
+        total_issued += amount
+        total_spent_without_salary += amount
+
+        issued_table.append([
+            P(person),
+            P(money(amount), False, True),
+            P(money(amount), False, True),
+        ])
+
+    if not issued_by_person:
+        issued_table.append([
+            P("Нет данных"),
+            P(money(0), False, True),
+            P(money(0), False, True),
+        ])
+
+    issued_table.append([
+        P("Итого", True),
+        P(money(total_issued), True, True),
+        P(money(total_spent_without_salary), True, True),
+    ])
+
+    story.append(
+        make_table(
+            issued_table,
+            [85 * mm, 40 * mm, 55 * mm],
+            total_rows=[len(issued_table) - 1]
+        )
+    )
+
+    # =========================================================
+    # 4. ЗАРПЛАТА
+    # =========================================================
+    story.append(
+        Paragraph(
+            "4. Зарплата",
+            section_style
+        )
+    )
+
+    salary_table = [
+        [
+            P("Кому выплачено", True),
+            P("Сумма", True, True)
+        ]
+    ]
+
+    calculated_salary_total = 0
+
+    for entry in salary_entries:
+        paid_to = get_value(
+            entry,
+            "paid_to",
+            ""
+        )
+
+        amount = num(
+            get_value(
+                entry,
+                "amount",
+                0
+            )
+        )
+
+        if not paid_to:
+            paid_to = "Получатель не указан"
+
+        calculated_salary_total += amount
+
+        salary_table.append([
+            P(paid_to),
+            P(money(amount), False, True)
+        ])
+
+    # Если salary_total есть в отчёте,
+    # используем его как итог.
+    if salary_total:
+        final_salary_total = salary_total
+    else:
+        final_salary_total = calculated_salary_total
+
+    if not salary_entries:
+        salary_table.append([
+            P("Нет выплат"),
+            P(money(0), False, True)
+        ])
+
+    salary_table.append([
+        P("Всего потрачено на ЗП", True),
+        P(money(final_salary_total), True, True)
+    ])
+
+    story.append(
+        make_table(
+            salary_table,
+            [120 * mm, 60 * mm],
+            total_rows=[len(salary_table) - 1]
+        )
+    )
+
+    # =========================================================
+    # 5. РАСХОДЫ ПО КАТЕГОРИЯМ
+    # =========================================================
+    story.append(
+        Paragraph(
+            "5. Расходы по категориям",
+            section_style
+        )
+    )
+
+    category_table = [
+        [
+            P("Категория", True),
+            P("Сумма", True, True)
+        ]
+    ]
+
+    category_total = 0
+
+    for category, amount in sorted(
+        expense_by_category.items(),
+        key=lambda x: num(x[1]),
+        reverse=True
+    ):
+        amount = num(amount)
+        category_total += amount
+
+        category_table.append([
+            P(category),
+            P(money(amount), False, True)
+        ])
+
+    if not expense_by_category:
+        category_table.append([
+            P("Нет расходов"),
+            P(money(0), False, True)
+        ])
+
+    category_table.append([
+        P("Всего расходов", True),
+        P(money(category_total), True, True)
+    ])
+
+    story.append(
+        make_table(
+            category_table,
+            [120 * mm, 60 * mm],
+            total_rows=[len(category_table) - 1]
+        )
+    )
+
+    # =========================================================
+    # 6. ОПЕРАЦИИ ЗА ПЕРИОД
+    # =========================================================
+    story.append(
+        Paragraph(
+            "6. Операции за период",
+            section_style
+        )
+    )
+
+    operations_table = [
+        [
+            P("Показатель", True),
+            P("Количество", True, True)
+        ],
+        [
+            P("Всего операций"),
+            P(str(total_operations), False, True)
+        ],
+        [
+            P("Доходных операций"),
+            P(str(income_operations), False, True)
+        ],
+        [
+            P("Расходных операций"),
+            P(str(expense_operations), False, True)
+        ],
+    ]
+
+    story.append(
+        make_table(
+            operations_table,
+            [120 * mm, 60 * mm]
+        )
+    )
+
+    # =========================================================
+    # 7. ЦЕЛЬ НЕДЕЛИ
+    # =========================================================
+    if goal_value > 0:
+        story.append(
+            Paragraph(
+                "7. Цель недели",
+                section_style
+            )
+        )
+
+        goal_table = [
+            [
+                P("Показатель", True),
+                P("Сумма", True, True)
+            ],
+            [
+                P("Цель"),
+                P(money(goal_value), False, True)
+            ],
+            [
+                P("Результат"),
+                P(money(goal_result), True, True)
+            ],
+        ]
+
+        story.append(
+            make_table(
+                goal_table,
+                [120 * mm, 60 * mm],
+                total_rows=[2]
+            )
+        )
+
+    # =========================================================
+    # Сборка PDF
+    # =========================================================
+    doc.build(story)
 
     buffer.seek(0)
-
-    # -----------------------------------------
-    # Возвращаем PDF пользователю
-    # -----------------------------------------
 
     filename = "financial_report.pdf"
 
@@ -1925,8 +2211,9 @@ def reports_pdf(
         buffer,
         media_type="application/pdf",
         headers={
-            "Content-Disposition":
+            "Content-Disposition": (
                 f'attachment; filename="{filename}"'
+            )
         }
     )
 # =========================================================
@@ -1993,12 +2280,17 @@ def transactions_page(
     response_class=HTMLResponse
 )
 def add_transaction_page(
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
+    employees = crud.get_employees(db)
+
     return templates.TemplateResponse(
         request=request,
         name="add_transaction.html",
-        context={}
+        context={
+            "employees": employees
+        }
     )
 
 
@@ -2011,14 +2303,24 @@ def add_transaction_form(
     amount: float = Form(...),
     date: str = Form(...),
     description: str = Form(""),
+    income_source: str = Form(None),
+    account: str = Form(None),
+    employee_id: int = Form(None),
+    paid_to: str = Form(None),
     db: Session = Depends(get_db)
 ):
+    from datetime import date as date_type
+
     transaction = schemas.TransactionCreate(
         type=type,
         category=category,
         amount=amount,
-        date=date,
-        description=description
+        date=date_type.fromisoformat(date),
+        description=description or None,
+        income_source=income_source or None,
+        account=account or None,
+        employee_id=employee_id,
+        paid_to=paid_to or None
     )
 
     crud.create_transaction(

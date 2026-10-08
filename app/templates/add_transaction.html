@@ -8,141 +8,128 @@
 
 <div class="dashboard-header">
     <div>
-        <h1>
-            ➕ Новая операция
-        </h1>
-
-        <p>
-            Добавьте доход или расход в финансовый учет
-        </p>
+        <h1>➕ Новая операция</h1>
+        <p>Добавьте доход или расход в финансовый учет</p>
     </div>
 </div>
-
 
 <div class="operation-wrapper">
-
     <div class="operation-card">
-
         <form method="post" action="/transactions/add">
 
-            <h2>
-                Данные операции
-            </h2>
-
+            <h2>Данные операции</h2>
 
             <div class="type-selector">
-
                 <label class="type-box income-type">
-
-                    <input
-                        type="radio"
-                        name="type"
-                        value="income"
-                        checked
-                    >
-
-                    <span>
-                        💰 Доход
-                    </span>
-
+                    <input type="radio" name="type" value="income" checked onchange="updateOperationFields(this.value)">
+                    <span>💰 Доход</span>
                 </label>
-
 
                 <label class="type-box expense-type">
-
-                    <input
-                        type="radio"
-                        name="type"
-                        value="expense"
-                    >
-
-                    <span>
-                        📉 Расход
-                    </span>
-
+                    <input type="radio" name="type" value="expense" onchange="updateOperationFields(this.value)">
+                    <span>📉 Расход</span>
                 </label>
-
             </div>
 
+            <div class="form-field" id="income-source-field">
+                <label>💼 Источник дохода</label>
+                <select name="income_source" id="income_source">
+                    <option value="">Выберите источник</option>
+                    <option value="investment">Инвестиции</option>
+                    <option value="show">Показы</option>
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label>🏦 Счёт</label>
+                <select name="account" id="account" required>
+                    <option value="">Выберите счёт</option>
+                    <option value="cash">Наличные</option>
+                    <option value="bank_account">Расчётный счёт</option>
+                </select>
+            </div>
 
             <div class="form-row">
-
                 <div class="form-field">
-
-                    <label>
-                        📂 Категория
-                    </label>
-
-                    <input
-                        type="text"
-                        name="category"
-                        placeholder="Например: Зарплата, Еда"
-                        required
-                    >
-
+                    <label>📂 Категория</label>
+                    <select name="category" id="category" required onchange="updateSalaryFields()">
+                        <option value="">Выберите категорию</option>
+                        <option value="Заработная плата">Заработная плата</option>
+                        <option value="Аренда">Аренда</option>
+                        <option value="Реклама">Реклама</option>
+                        <option value="Материалы">Материалы</option>
+                        <option value="Транспорт">Транспорт</option>
+                        <option value="Прочее">Прочее</option>
+                    </select>
                 </div>
 
-
                 <div class="form-field">
-
-                    <label>
-                        💵 Сумма
-                    </label>
-
-                    <input
-                        type="number"
-                        name="amount"
-                        placeholder="0 ₽"
-                        step="0.01"
-                        min="0"
-                        required
-                    >
-
+                    <label>💵 Сумма</label>
+                    <input type="number" name="amount" placeholder="0 ₽" step="0.01" min="0.01" required>
                 </div>
-
             </div>
 
+            <div class="form-field" id="paid-to-field" style="display:none;">
+                <label>👤 Кому выдано</label>
+                <input type="text" name="paid_to" id="paid_to" placeholder="ФИО сотрудника">
+                <small>Заполняется для категории «Заработная плата».</small>
+            </div>
 
             <div class="form-field">
-
-                <label>
-                    📅 Дата операции
-                </label>
-
-                <input
-                    type="date"
-                    name="date"
-                    required
-                >
-
+                <label>📅 Дата операции</label>
+                <input type="date" name="date" id="operation-date" required>
             </div>
-
 
             <div class="form-field">
-
-                <label>
-                    📝 Описание
-                </label>
-
-                <textarea
-                    name="description"
-                    placeholder="Введите комментарий к операции"
-                ></textarea>
-
+                <label>📝 Описание</label>
+                <textarea name="description" placeholder="Введите комментарий к операции"></textarea>
             </div>
 
-
-            <button
-                type="submit"
-                class="save-button"
-            >
-                💾 Сохранить операцию
-            </button>
-
+            <button type="submit" class="save-button">💾 Сохранить операцию</button>
         </form>
-
     </div>
-
 </div>
+
+<script>
+function updateOperationFields(type) {
+    const sourceField = document.getElementById('income-source-field');
+    const source = document.getElementById('income_source');
+
+    if (type === 'income') {
+        sourceField.style.display = '';
+        source.required = true;
+    } else {
+        sourceField.style.display = 'none';
+        source.required = false;
+        source.value = '';
+    }
+
+    updateSalaryFields();
+}
+
+function updateSalaryFields() {
+    const type = document.querySelector('input[name="type"]:checked')?.value;
+    const category = document.getElementById('category')?.value;
+    const field = document.getElementById('paid-to-field');
+    const input = document.getElementById('paid_to');
+
+    const isSalary = type === 'expense' && category === 'Заработная плата';
+
+    field.style.display = isSalary ? '' : 'none';
+    input.required = isSalary;
+
+    if (!isSalary) {
+        input.value = '';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const dateInput = document.getElementById('operation-date');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+    updateOperationFields('income');
+});
+</script>
 
 {% endblock %}

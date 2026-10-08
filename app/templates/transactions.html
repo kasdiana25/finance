@@ -7,12 +7,9 @@
 {% block content %}
 
 <div class="dashboard-header">
-
     <div>
         <h1>Операции</h1>
-        <p>
-            История всех доходов и расходов
-        </p>
+        <p>История всех доходов и расходов</p>
     </div>
 
     <button
@@ -22,40 +19,40 @@
     >
         + Добавить операцию
     </button>
-
 </div>
 
+
+<!-- ===================================================== -->
+<!-- ВСЕ ОПЕРАЦИИ -->
+<!-- ===================================================== -->
 
 <div class="panel">
 
     <div class="panel-header">
-
         <div>
             <h2>Все операции</h2>
             <p class="panel-description">
                 История финансовых операций
             </p>
         </div>
-
     </div>
-
 
     <div class="table-wrapper">
 
         <table>
 
             <thead>
-
                 <tr>
                     <th>Дата</th>
                     <th>Тип</th>
                     <th>Категория</th>
+                    <th>Источник дохода</th>
+                    <th>Счёт</th>
+                    <th>Кому выдано</th>
                     <th>Сумма</th>
                     <th>Описание</th>
                 </tr>
-
             </thead>
-
 
             <tbody>
 
@@ -63,52 +60,136 @@
 
                 <tr>
 
+                    <!-- Дата -->
                     <td>
                         {{ transaction.date }}
                     </td>
 
 
+                    <!-- Тип -->
                     <td>
 
                         {% if transaction.type == "income" %}
 
-                        <span class="badge income-badge">
-                            Доход
-                        </span>
+                            <span class="badge income-badge">
+                                Доход
+                            </span>
 
                         {% else %}
 
-                        <span class="badge expense-badge">
-                            Расход
-                        </span>
+                            <span class="badge expense-badge">
+                                Расход
+                            </span>
 
                         {% endif %}
 
                     </td>
 
 
+                    <!-- Категория -->
                     <td>
-                        {{ transaction.category }}
+
+                        {% if transaction.type == "expense" %}
+
+                            {{ transaction.category or "Без категории" }}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
                     </td>
 
 
+                    <!-- Источник дохода -->
+                    <td>
+
+                        {% if transaction.type == "income" %}
+
+                            {% if transaction.income_source == "investment" %}
+
+                                Инвестиции
+
+                            {% elif transaction.income_source == "show" %}
+
+                                Показы
+
+                            {% else %}
+
+                                —
+
+                            {% endif %}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- Счёт -->
+                    <td>
+
+                        {% if transaction.account == "cash" %}
+
+                            Наличные
+
+                        {% elif transaction.account == "bank_account" %}
+
+                            Расчётный счёт
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- Кому выдано -->
+                    <td>
+
+                        {% if transaction.type == "expense"
+                              and transaction.category == "Заработная плата" %}
+
+                            {{ transaction.paid_to or "—" }}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- Сумма -->
                     <td class="transaction-amount">
 
                         {% if transaction.type == "income" %}
+
                             <span class="income-amount">
-                                +{{ transaction.amount }} ₽
+                                +{{ "%.2f"|format(transaction.amount) }} ₽
                             </span>
+
                         {% else %}
+
                             <span class="expense-amount">
-                                -{{ transaction.amount }} ₽
+                                -{{ "%.2f"|format(transaction.amount) }} ₽
                             </span>
+
                         {% endif %}
 
                     </td>
 
 
+                    <!-- Описание -->
                     <td>
-                        {{ transaction.description or "-" }}
+                        {{ transaction.description or "—" }}
                     </td>
 
                 </tr>
@@ -117,7 +198,7 @@
 
                 <tr>
 
-                    <td colspan="5" class="empty-table">
+                    <td colspan="8" class="empty-table">
 
                         <div class="empty-table-content">
 
@@ -130,7 +211,8 @@
                             </h3>
 
                             <p>
-                                Добавьте первую доходную или расходную операцию
+                                Добавьте первую доходную
+                                или расходную операцию
                             </p>
 
                             <button
@@ -158,11 +240,14 @@
 </div>
 
 
-<!-- =========================================================
-     МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ ОПЕРАЦИИ
-     ========================================================= -->
+<!-- ===================================================== -->
+<!-- МОДАЛЬНОЕ ОКНО -->
+<!-- ===================================================== -->
 
-<div id="transactionModal" class="transaction-modal">
+<div
+    id="transactionModal"
+    class="transaction-modal"
+>
 
     <div
         class="transaction-modal-overlay"
@@ -173,7 +258,7 @@
     <div class="transaction-modal-content">
 
 
-        <!-- HEADER -->
+        <!-- Заголовок -->
 
         <div class="transaction-modal-header">
 
@@ -189,7 +274,6 @@
 
             </div>
 
-
             <button
                 type="button"
                 class="transaction-modal-close"
@@ -201,7 +285,7 @@
         </div>
 
 
-        <!-- FORM -->
+        <!-- Форма -->
 
         <form
             method="post"
@@ -209,10 +293,11 @@
         >
 
 
+            <!-- ================================================= -->
             <!-- ТИП ОПЕРАЦИИ -->
+            <!-- ================================================= -->
 
             <div class="transaction-type-selector">
-
 
                 <label class="transaction-type income">
 
@@ -221,6 +306,7 @@
                         name="type"
                         value="income"
                         checked
+                        onchange="updateModalFields('income')"
                     >
 
                     <div>
@@ -244,6 +330,7 @@
                         type="radio"
                         name="type"
                         value="expense"
+                        onchange="updateModalFields('expense')"
                     >
 
                     <div>
@@ -260,53 +347,217 @@
 
                 </label>
 
+            </div>
+
+
+            <!-- ================================================= -->
+            <!-- ИСТОЧНИК ДОХОДА -->
+            <!-- ================================================= -->
+
+            <div
+                class="form-field"
+                id="modal-income-source-field"
+            >
+
+                <label>
+                    💼 Источник дохода
+                </label>
+
+                <select
+                    name="income_source"
+                    id="modal-income-source"
+                >
+
+                    <option value="">
+                        Выберите источник
+                    </option>
+
+                    <option value="investment">
+                        Инвестиции
+                    </option>
+
+                    <option value="show">
+                        Показы
+                    </option>
+
+                </select>
 
             </div>
 
 
-            <!-- КАТЕГОРИЯ + СУММА -->
+            <!-- ================================================= -->
+            <!-- СЧЁТ -->
+            <!-- ================================================= -->
 
-            <div class="transaction-form-grid">
+            <div class="form-field">
 
+                <label>
+                    🏦 Счёт
+                </label>
 
-                <div class="form-field">
+                <select
+                    name="account"
+                    id="modal-account"
+                    required
+                >
 
-                    <label>
-                        📂 Категория
-                    </label>
+                    <option value="">
+                        Выберите счёт
+                    </option>
 
-                    <input
-                        type="text"
-                        name="category"
-                        placeholder="Например: Зарплата, Еда"
-                        required
-                    >
+                    <option value="cash">
+                        Наличные
+                    </option>
 
-                </div>
+                    <option value="bank_account">
+                        Расчётный счёт
+                    </option>
 
-
-                <div class="form-field">
-
-                    <label>
-                        💵 Сумма
-                    </label>
-
-                    <input
-                        type="number"
-                        name="amount"
-                        placeholder="0"
-                        step="0.01"
-                        min="0"
-                        required
-                    >
-
-                </div>
-
+                </select>
 
             </div>
 
 
+            <!-- ================================================= -->
+            <!-- КАТЕГОРИЯ -->
+            <!-- ================================================= -->
+
+            <div
+                class="form-field"
+                id="modal-category-field"
+            >
+
+                <label>
+                    📂 Категория расхода
+                </label>
+
+                <select
+                    name="category"
+                    id="modal-category"
+                    onchange="updateModalSalaryField()"
+                >
+
+                    <option value="">
+                        Выберите категорию
+                    </option>
+
+                    <option value="Заработная плата">
+                        Заработная плата
+                    </option>
+
+                    <option value="Аренда">
+                        Аренда
+                    </option>
+
+                    <option value="Реклама">
+                        Реклама
+                    </option>
+
+                    <option value="Материалы">
+                        Материалы
+                    </option>
+
+                    <option value="Транспорт">
+                        Транспорт
+                    </option>
+
+                    <option value="Прочее">
+                        Прочее
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <!-- ================================================= -->
+            <!-- КОМУ ВЫДАНО -->
+            <!-- ================================================= -->
+
+            <div
+                class="form-field"
+                id="modal-paid-to-field"
+                style="display:none;"
+            >
+
+                <label>
+                    👤 Кому выдано
+                </label>
+
+                <select
+                    name="employee_id"
+                    id="modal-employee-id"
+                >
+
+                    <option value="">
+                        — выбрать сотрудника —
+                    </option>
+
+                    {% for employee in employees %}
+
+                    <option value="{{ employee.id }}">
+                        {{ employee.full_name }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <small>
+                    Если выплаты нет сотруднику,
+                    можно указать получателя вручную.
+                </small>
+
+            </div>
+
+
+            <!-- Получатель вручную -->
+
+            <div
+                class="form-field"
+                id="modal-paid-to-manual-field"
+                style="display:none;"
+            >
+
+                <label>
+                    👤 Получатель
+                </label>
+
+                <input
+                    type="text"
+                    name="paid_to"
+                    id="modal-paid-to"
+                    placeholder="ФИО или название получателя"
+                >
+
+            </div>
+
+
+            <!-- ================================================= -->
+            <!-- СУММА -->
+            <!-- ================================================= -->
+
+            <div class="form-field">
+
+                <label>
+                    💵 Сумма
+                </label>
+
+                <input
+                    type="number"
+                    name="amount"
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0.01"
+                    required
+                >
+
+            </div>
+
+
+            <!-- ================================================= -->
             <!-- ДАТА -->
+            <!-- ================================================= -->
 
             <div class="form-field">
 
@@ -317,13 +568,16 @@
                 <input
                     type="date"
                     name="date"
+                    id="modal-operation-date"
                     required
                 >
 
             </div>
 
 
+            <!-- ================================================= -->
             <!-- ОПИСАНИЕ -->
+            <!-- ================================================= -->
 
             <div class="form-field">
 
@@ -340,7 +594,9 @@
             </div>
 
 
+            <!-- ================================================= -->
             <!-- КНОПКИ -->
+            <!-- ================================================= -->
 
             <div class="transaction-modal-actions">
 
@@ -352,7 +608,6 @@
                     Отмена
                 </button>
 
-
                 <button
                     type="submit"
                     class="transaction-save-button"
@@ -362,7 +617,6 @@
 
             </div>
 
-
         </form>
 
     </div>
@@ -370,71 +624,283 @@
 </div>
 
 
-<!-- =========================================================
-     JAVASCRIPT
-     ========================================================= -->
-
 <script>
+
+/* =========================================================
+   ОТКРЫТИЕ
+========================================================= */
 
 function openTransactionModal() {
 
-    const modal = document.getElementById("transactionModal");
+    const modal =
+        document.getElementById(
+            'transactionModal'
+        );
 
     if (!modal) {
         return;
     }
 
-    modal.classList.add("active");
+    modal.classList.add('active');
 
-    document.body.classList.add("modal-open");
-
-
-    /*
-     * Автоматически устанавливаем сегодняшнюю дату
-     */
-
-    const dateInput = modal.querySelector(
-        'input[name="date"]'
+    document.body.classList.add(
+        'modal-open'
     );
 
 
-    if (dateInput && !dateInput.value) {
+    const dateInput =
+        document.getElementById(
+            'modal-operation-date'
+        );
 
-        const today = new Date()
-            .toISOString()
-            .split("T")[0];
+    if (
+        dateInput &&
+        !dateInput.value
+    ) {
 
-        dateInput.value = today;
+        const now =
+            new Date();
 
+        const year =
+            now.getFullYear();
+
+        const month =
+            String(
+                now.getMonth() + 1
+            ).padStart(2, '0');
+
+        const day =
+            String(
+                now.getDate()
+            ).padStart(2, '0');
+
+        dateInput.value =
+            `${year}-${month}-${day}`;
     }
 
+
+    const selectedType =
+        document.querySelector(
+            'input[name="type"]:checked'
+        );
+
+    updateModalFields(
+        selectedType
+            ? selectedType.value
+            : 'income'
+    );
 }
 
 
+/* =========================================================
+   ЗАКРЫТИЕ
+========================================================= */
+
 function closeTransactionModal() {
 
-    const modal = document.getElementById("transactionModal");
+    const modal =
+        document.getElementById(
+            'transactionModal'
+        );
 
     if (!modal) {
         return;
     }
 
-    modal.classList.remove("active");
+    modal.classList.remove('active');
 
-    document.body.classList.remove("modal-open");
+    document.body.classList.remove(
+        'modal-open'
+    );
+}
+
+
+/* =========================================================
+   ПЕРЕКЛЮЧЕНИЕ ДОХОД / РАСХОД
+========================================================= */
+
+function updateModalFields(type) {
+
+    const sourceField =
+        document.getElementById(
+            'modal-income-source-field'
+        );
+
+    const source =
+        document.getElementById(
+            'modal-income-source'
+        );
+
+
+    const categoryField =
+        document.getElementById(
+            'modal-category-field'
+        );
+
+    const category =
+        document.getElementById(
+            'modal-category'
+        );
+
+
+    if (type === 'income') {
+
+        /* Источник показываем */
+
+        sourceField.style.display =
+            '';
+
+        source.required =
+            true;
+
+
+        /* Категорию скрываем */
+
+        categoryField.style.display =
+            'none';
+
+        category.required =
+            false;
+
+        category.value =
+            '';
+
+
+    } else {
+
+        /* Источник скрываем */
+
+        sourceField.style.display =
+            'none';
+
+        source.required =
+            false;
+
+        source.value =
+            '';
+
+
+        /* Категорию показываем */
+
+        categoryField.style.display =
+            '';
+
+        category.required =
+            true;
+
+    }
+
+
+    updateModalSalaryField();
+}
+
+
+/* =========================================================
+   ЗАРПЛАТА
+========================================================= */
+
+function updateModalSalaryField() {
+
+    const typeElement =
+        document.querySelector(
+            'input[name="type"]:checked'
+        );
+
+    const type =
+        typeElement
+            ? typeElement.value
+            : null;
+
+
+    const category =
+        document.getElementById(
+            'modal-category'
+        );
+
+
+    const employeeField =
+        document.getElementById(
+            'modal-paid-to-field'
+        );
+
+
+    const employee =
+        document.getElementById(
+            'modal-employee-id'
+        );
+
+
+    const manualField =
+        document.getElementById(
+            'modal-paid-to-manual-field'
+        );
+
+
+    const manualInput =
+        document.getElementById(
+            'modal-paid-to'
+        );
+
+
+    const isSalary =
+        type === 'expense' &&
+        category &&
+        category.value ===
+            'Заработная плата';
+
+
+    if (isSalary) {
+
+        employeeField.style.display =
+            '';
+
+        manualField.style.display =
+            '';
+
+
+        employee.required =
+            false;
+
+        manualInput.required =
+            false;
+
+    } else {
+
+        employeeField.style.display =
+            'none';
+
+        manualField.style.display =
+            'none';
+
+
+        employee.value =
+            '';
+
+        manualInput.value =
+            '';
+
+        employee.required =
+            false;
+
+        manualInput.required =
+            false;
+
+    }
 
 }
 
 
-/*
- * Закрытие по клавише ESC
- */
+/* =========================================================
+   ESC
+========================================================= */
 
 document.addEventListener(
-    "keydown",
+    'keydown',
     function(event) {
 
-        if (event.key === "Escape") {
+        if (
+            event.key === 'Escape'
+        ) {
 
             closeTransactionModal();
 
@@ -443,7 +909,22 @@ document.addEventListener(
     }
 );
 
-</script>
 
+/* =========================================================
+   НА СТАРТЕ
+========================================================= */
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function() {
+
+        updateModalFields(
+            'income'
+        );
+
+    }
+);
+
+</script>
 
 {% endblock %}

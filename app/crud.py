@@ -30,12 +30,33 @@ def create_transaction(
     db: Session,
     transaction: schemas.TransactionCreate
 ):
+    # Проверяем новые финансовые поля только для новых операций.
+    if transaction.type == "income" and not transaction.income_source:
+        raise ValueError(
+            "Для дохода необходимо указать источник: инвестиции или показы"
+        )
+
+    if not transaction.account:
+        raise ValueError(
+            "Необходимо указать счёт: наличные или расчётный счёт"
+        )
+
+    if transaction.type == "expense" and transaction.category == "Заработная плата":
+        if not transaction.employee_id and not transaction.paid_to:
+            raise ValueError(
+                "Для зарплаты необходимо указать сотрудника или получателя"
+            )
+
     db_transaction = models.Transaction(
         type=transaction.type,
         category=transaction.category,
         amount=transaction.amount,
         description=transaction.description,
-        date=transaction.date
+        date=transaction.date,
+        income_source=transaction.income_source,
+        account=transaction.account,
+        employee_id=transaction.employee_id,
+        paid_to=transaction.paid_to
     )
 
     db.add(db_transaction)
@@ -58,11 +79,31 @@ def update_transaction(
     if db_transaction is None:
         return None
 
+    if transaction.type == "income" and not transaction.income_source:
+        raise ValueError(
+            "Для дохода необходимо указать источник: инвестиции или показы"
+        )
+
+    if not transaction.account:
+        raise ValueError(
+            "Необходимо указать счёт: наличные или расчётный счёт"
+        )
+
+    if transaction.type == "expense" and transaction.category == "Заработная плата":
+        if not transaction.employee_id and not transaction.paid_to:
+            raise ValueError(
+                "Для зарплаты необходимо указать сотрудника или получателя"
+            )
+
     db_transaction.type = transaction.type
     db_transaction.category = transaction.category
     db_transaction.amount = transaction.amount
     db_transaction.description = transaction.description
     db_transaction.date = transaction.date
+    db_transaction.income_source = transaction.income_source
+    db_transaction.account = transaction.account
+    db_transaction.employee_id = transaction.employee_id
+    db_transaction.paid_to = transaction.paid_to
 
     db.commit()
     db.refresh(db_transaction)
@@ -213,6 +254,49 @@ def update_money_transfer_status(
     db.refresh(transfer)
 
     return transfer
+
+
+# =========================================================
+# WEEKLY GOALS
+# =========================================================
+
+def get_weekly_goal(db: Session, week_start):
+    return db.query(
+        models.WeeklyGoal
+    ).filter(
+        models.WeeklyGoal.week_start == week_start
+    ).first()
+
+
+def create_or_update_weekly_goal(db: Session, data: schemas.WeeklyGoalCreate):
+    goal = get_weekly_goal(db, data.week_start)
+
+    if goal is None:
+        goal = models.WeeklyGoal(
+            week_start=data.week_start,
+            target_income=data.target_income,
+            target_expense=data.target_expense,
+            target_balance=data.target_balance,
+            description=data.description
+        )
+        db.add(goal)
+    else:
+        goal.target_income = data.target_income
+        goal.target_expense = data.target_expense
+        goal.target_balance = data.target_balance
+        goal.description = data.description
+
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+
+def get_weekly_goals(db: Session):
+    return db.query(
+        models.WeeklyGoal
+    ).order_by(
+        models.WeeklyGoal.week_start.desc()
+    ).all()
 
 
 # =========================================================

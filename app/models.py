@@ -57,6 +57,33 @@ class Transaction(Base):
         Integer,
         nullable=True
     )
+
+    # Источник дохода: investment / show.
+    # Для расходов поле может быть пустым.
+    income_source = Column(
+        String,
+        nullable=True
+    )
+
+    # Куда/откуда относятся деньги:
+    # cash — наличные, bank_account — расчётный счёт.
+    account = Column(
+        String,
+        nullable=True
+    )
+
+    # Сотрудник, которому выдана зарплата.
+    employee_id = Column(
+        Integer,
+        nullable=True,
+        index=True
+    )
+
+    # Имя получателя, если это не сотрудник из TelegramUser.
+    paid_to = Column(
+        String,
+        nullable=True
+    )
     
 # =========================================================
 # РЕГУЛЯРНЫЕ ПЛАТЕЖИ
@@ -446,6 +473,30 @@ class Product(Base):
 
     # Дата добавления товара
     created_at = Column(Date, default=date.today)
+
+
+# =========================================================
+# ЦЕЛИ НА НЕДЕЛЮ
+# =========================================================
+
+class WeeklyGoal(Base):
+    __tablename__ = "weekly_goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Понедельник соответствующей недели
+    week_start = Column(Date, nullable=False, unique=True, index=True)
+
+    # План дохода за неделю
+    target_income = Column(Float, nullable=False, default=0)
+
+    # Максимально допустимый расход за неделю
+    target_expense = Column(Float, nullable=False, default=0)
+
+    # Плановый результат (доход - расход)
+    target_balance = Column(Float, nullable=False, default=0)
+
+    description = Column(String, nullable=True)
 
 
 # =========================================================
