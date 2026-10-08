@@ -512,6 +512,34 @@ def employee_selection_keyboard(employees):
     )
 
 
+def account_selection_keyboard():
+    """Выбор счёта, с которого выдаются деньги (как в веб-форме)."""
+    return ReplyKeyboardMarkup(
+        [
+            [
+                KeyboardButton("🏦 Банк"),
+                KeyboardButton("💳 Расчётный счёт"),
+            ],
+            [
+                KeyboardButton("❌ Отмена"),
+            ],
+        ],
+        resize_keyboard=True,
+    )
+
+
+# Текст кнопки → значение в БД (как в веб-форме)
+ACCOUNT_MAP = {
+    "🏦 Банк": "cash",
+    "💳 Расчётный счёт": "bank_account",
+}
+
+ACCOUNT_LABELS = {
+    "cash": "🏦 Банк",
+    "bank_account": "💳 Расчётный счёт",
+}
+
+
 async def handle_money_transfer_step(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -570,10 +598,9 @@ async def handle_money_transfer_step(
             data["employee_name"] = employee.full_name
             data["employee_telegram_id"] = employee.telegram_id
 
-            # Переходим к вводу суммы
-            data["step"] = "amount"
+            # Переходим к выбору счёта
+            data["step"] = "account"
 
-            # Получаем текущий баланс
             balance = get_employee_balance(
                 db,
                 employee.id
@@ -583,17 +610,8 @@ async def handle_money_transfer_step(
                 f"👤 Сотрудник: {employee.full_name}\n\n"
                 f"💰 Текущий баланс: "
                 f"{balance:,.2f} ₽\n\n"
-                "Введите сумму, которую нужно выдать:\n\n"
-                "Например:\n"
-                "50000",
-                reply_markup=ReplyKeyboardMarkup(
-                    [
-                        [
-                            KeyboardButton("❌ Отмена")
-                        ]
-                    ],
-                    resize_keyboard=True
-                )
+                "Выберите счёт, с которого выдаются деньги:",
+                reply_markup=account_selection_keyboard()
             )
 
         finally:
@@ -602,7 +620,51 @@ async def handle_money_transfer_step(
         return True
 
     # =====================================================
-    # ШАГ 2. ВВОД СУММЫ
+    # ШАГ 2. ВЫБОР СЧЁТА
+    # =====================================================
+
+    if data.get("step") == "account":
+
+        if text == "❌ Отмена":
+            context.user_data.pop("money_transfer", None)
+            await update.message.reply_text(
+                "❌ Выдача денег отменена.",
+                reply_markup=director_keyboard()
+            )
+            return True
+
+        account = ACCOUNT_MAP.get(text)
+        if not account:
+            await update.message.reply_text(
+                "Выберите счёт кнопкой ниже:",
+                reply_markup=account_selection_keyboard()
+            )
+            return True
+
+        data["account"] = account
+        data["step"] = "amount"
+
+        account_label = ACCOUNT_LABELS.get(account, account)
+
+        await update.message.reply_text(
+            f"👤 Сотрудник: {data['employee_name']}\n"
+            f"🏦 Счёт: {account_label}\n\n"
+            "Введите сумму, которую нужно выдать:\n\n"
+            "Например:\n"
+            "50000",
+            reply_markup=ReplyKeyboardMarkup(
+                [
+                    [
+                        KeyboardButton("❌ Отмена")
+                    ]
+                ],
+                resize_keyboard=True
+            )
+        )
+        return True
+
+    # =====================================================
+    # ШАГ 3. ВВОД СУММЫ
     # =====================================================
 
     if data.get("step") == "amount":
@@ -633,6 +695,9 @@ async def handle_money_transfer_step(
 
             return True
 
+        account = data.get("account") or "cash"
+        account_label = ACCOUNT_LABELS.get(account, account)
+
         db = get_db()
 
         try:
@@ -659,15 +724,10 @@ async def handle_money_transfer_step(
             transfer = MoneyTransfer(
                 telegram_user_id=employee.id,
                 amount=amount,
-
-                # Назначение теперь общее.
-                # Деньги НЕ привязаны к конкретной покупке.
+                account=account,
                 purpose="Пополнение баланса",
-
                 comment="Выдача денежных средств сотруднику",
-
                 status="issued",
-
                 created_at=date.today()
             )
 
@@ -691,6 +751,7 @@ async def handle_money_transfer_step(
             await update.message.reply_text(
                 "✅ Деньги выданы\n\n"
                 f"👤 {employee.full_name}\n"
+                f"🏦 Счёт: {account_label}\n"
                 f"💰 Выдано: {amount:,.2f} ₽\n"
                 f"💳 Теперь у сотрудника: {balance:,.2f} ₽",
                 reply_markup=director_keyboard()
@@ -2578,10 +2639,11 @@ async def handle_purchase_request_callback(
                 await query.edit_message_text("❌ Сотрудник не найден.")
                 return
 
-            # Создаём выдачу денег
+            # Создаём выдачу денег (счёт по умолчанию — Банк)
             transfer = MoneyTransfer(
                 telegram_user_id=employee.id,
                 amount=amount,
+                account="cash",
                 purpose=purpose,
                 comment=f"По заявке {purchase_request.number}",
                 status="issued",
@@ -3040,8 +3102,12 @@ async def director_money_transfers(
 
                 status_text = "🟢 Закрыто"
 
+            account_raw = getattr(transfer, "account", None) or "cash"
+            account_label = ACCOUNT_LABELS.get(account_raw, account_raw)
+
             lines.append(
                 f"👤 {employee_name}\n"
+                f"🏦 Счёт: {account_label}\n"
                 f"💰 Выдано: "
                 f"{transfer.amount:,.2f} ₽\n"
                 f"💸 Потрачено: "
@@ -3368,11 +3434,13 @@ async def handle_director_text(
 
             # ---------------------------------------------
             # СОЗДАЁМ MONEY TRANSFER
+            # (текстовая команда — счёт по умолчанию Банк)
             # ---------------------------------------------
 
             transfer = MoneyTransfer(
                 telegram_user_id=employee.id,
                 amount=amount,
+                account="cash",
                 purpose=purpose,
                 comment=text,
                 status="issued",
@@ -3393,6 +3461,7 @@ async def handle_director_text(
                 "✅ Деньги выданы сотруднику\n\n"
                 f"👤 Сотрудник: "
                 f"{employee.full_name}\n"
+                f"🏦 Счёт: 🏦 Банк\n"
                 f"💰 Сумма: "
                 f"{amount:,.2f} ₽\n"
                 f"📝 Назначение: "

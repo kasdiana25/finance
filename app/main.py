@@ -621,7 +621,8 @@ def create_money_transfer_api(
         telegram_user_id=transfer.telegram_user_id,
         amount=transfer.amount,
         purpose=transfer.purpose,
-        comment=transfer.comment
+        comment=transfer.comment,
+        account=transfer.account
     )
 
 
@@ -660,16 +661,25 @@ def money_transfers_page(
 
         transfers.append({
             "id": transfer.id,
+
             "employee_name": (
                 employee.full_name
                 if employee
                 else "Неизвестный сотрудник"
             ),
+
             "amount": transfer.amount,
+
             "purpose": transfer.purpose,
+
             "comment": transfer.comment,
+
             "status": transfer.status,
-            "created_at": transfer.created_at
+
+            "created_at": transfer.created_at,
+
+            # Счёт, с которого выданы деньги
+            "account": transfer.account
         })
 
     return templates.TemplateResponse(
@@ -688,14 +698,31 @@ def create_money_transfer_page(
     amount: float = Form(...),
     purpose: str = Form(...),
     comment: str = Form(""),
+
+    # Счёт, с которого выдаются деньги
+    account: str = Form(...),
+
     db: Session = Depends(get_db)
 ):
+    if account not in ("cash", "bank_account"):
+        raise HTTPException(
+            status_code=400,
+            detail="Неверно указан счёт"
+        )
+
+    if amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Сумма должна быть больше нуля"
+        )
+
     crud.create_money_transfer(
         db=db,
         telegram_user_id=telegram_user_id,
         amount=amount,
         purpose=purpose,
-        comment=comment
+        comment=comment,
+        account=account
     )
 
     return RedirectResponse(
@@ -731,7 +758,6 @@ def close_money_transfer(
         url="/money-transfers",
         status_code=303
     )
-
 
 # =========================================================
 # API PURCHASE REQUESTS

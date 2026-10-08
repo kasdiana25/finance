@@ -22,189 +22,259 @@
 </div>
 
 
+<!-- =========================================================
+     ОБЩИЕ ПОКАЗАТЕЛИ
+========================================================= -->
 
 <div class="dashboard-cards">
 
-
     <div class="finance-card income">
 
-        <div class="icon">
-            💰
-        </div>
+        <div class="icon">💰</div>
 
         <div>
-            <h3>
-                Доходы
-            </h3>
+            <h3>Доходы</h3>
 
             <p>
-                {{ statistics.income }} ₽
+                {{ "%.2f"|format(statistics.income) }} ₽
             </p>
         </div>
 
     </div>
-
 
 
     <div class="finance-card expense">
 
-        <div class="icon">
-            📉
-        </div>
+        <div class="icon">📉</div>
 
         <div>
-            <h3>
-                Расходы
-            </h3>
+            <h3>Расходы</h3>
 
             <p>
-                {{ statistics.expense }} ₽
+                {{ "%.2f"|format(statistics.expense) }} ₽
             </p>
         </div>
 
     </div>
-
 
 
     <div class="finance-card balance">
 
-        <div class="icon">
-            💳
-        </div>
+        <div class="icon">💳</div>
 
         <div>
-            <h3>
-                Баланс
-            </h3>
+            <h3>Общий баланс</h3>
 
             <p>
-                {{ statistics.balance }} ₽
+                {{ "%.2f"|format(statistics.balance) }} ₽
             </p>
-
         </div>
 
     </div>
 
-
 </div>
 
 
+<!-- =========================================================
+     ДЕНЬГИ ПО СЧЕТАМ
+========================================================= -->
 
 <div class="panel">
 
+    <div class="panel-header">
 
-<div class="panel-header">
+        <h2>Деньги по счетам</h2>
 
-<h2>
-Последние операции
-</h2>
+    </div>
 
 
-<a href="/transactions-page">
-Посмотреть все →
-</a>
+    <div class="dashboard-cards">
 
+
+        <!-- БАНК -->
+
+        <div class="finance-card balance">
+
+            <div class="icon">🏦</div>
+
+            <div>
+
+                <h3>Банк</h3>
+
+                <p>
+                    {{ "%.2f"|format(statistics.bank.balance) }} ₽
+                </p>
+
+                <small>
+                    Начальный остаток:
+                    {{ "%.2f"|format(statistics.bank.initial_balance) }} ₽
+                </small>
+
+                <br>
+
+                <small>
+                    Доходы:
+                    {{ "%.2f"|format(statistics.bank.income) }} ₽
+                </small>
+
+                <br>
+
+                <small>
+                    Расходы:
+                    {{ "%.2f"|format(statistics.bank.expense) }} ₽
+                </small>
+
+            </div>
+
+        </div>
+
+
+        <!-- РАСЧЁТНЫЙ СЧЁТ -->
+
+        <div class="finance-card balance">
+
+            <div class="icon">💳</div>
+
+            <div>
+
+                <h3>Расчётный счёт</h3>
+
+                <p>
+                    {{ "%.2f"|format(statistics.settlement.balance) }} ₽
+                </p>
+
+                <small>
+                    Начальный остаток:
+                    {{ "%.2f"|format(statistics.settlement.initial_balance) }} ₽
+                </small>
+
+                <br>
+
+                <small>
+                    Доходы:
+                    {{ "%.2f"|format(statistics.settlement.income) }} ₽
+                </small>
+
+                <br>
+
+                <small>
+                    Расходы:
+                    {{ "%.2f"|format(statistics.settlement.expense) }} ₽
+                </small>
+
+            </div>
+
+        </div>
+
+
+    </div>
 
 </div>
 
 
+<!-- =========================================================
+     ПОСЛЕДНИЕ ОПЕРАЦИИ
+========================================================= -->
 
-<table>
+<div class="panel">
 
+    <div class="panel-header">
 
-<thead>
+        <h2>Последние операции</h2>
 
-<tr>
+        <a href="/transactions-page">
+            Посмотреть все →
+        </a>
 
-<th>
-Дата
-</th>
-
-<th>
-Тип
-</th>
-
-<th>
-Категория
-</th>
-
-<th>
-Сумма
-</th>
-
-<th>
-Описание
-</th>
-
-</tr>
-
-</thead>
+    </div>
 
 
+    <table>
 
-<tbody>
+        <thead>
 
+        <tr>
+            <th>Дата</th>
+            <th>Тип</th>
+            <th>Категория</th>
+            <th>Счёт</th>
+            <th>Сумма</th>
+            <th>Описание</th>
+        </tr>
 
-{% for transaction in transactions %}
-
-<tr>
-
-
-<td>
-{{ transaction.date }}
-</td>
-
-
-
-<td>
-
-{% if transaction.type == "income" %}
-
-<span class="badge income-badge">
-Доход
-</span>
-
-{% else %}
-
-<span class="badge expense-badge">
-Расход
-</span>
-
-{% endif %}
+        </thead>
 
 
-</td>
+        <tbody>
+
+        {% for transaction in transactions %}
+
+        <tr>
+
+            <td>
+                {{ transaction.date }}
+            </td>
 
 
+            <td>
 
-<td>
-{{ transaction.category }}
-</td>
+                {% if transaction.type == "income" %}
 
+                    <span class="badge income-badge">
+                        Доход
+                    </span>
 
+                {% else %}
 
-<td>
-{{ transaction.amount }} ₽
-</td>
+                    <span class="badge expense-badge">
+                        Расход
+                    </span>
 
+                {% endif %}
 
-
-<td>
-{{ transaction.description or "-" }}
-</td>
-
-
-</tr>
+            </td>
 
 
-{% endfor %}
+            <td>
+                {{ transaction.category }}
+            </td>
 
 
-</tbody>
+            <td>
+
+                {% if transaction.account == "cash" %}
+
+                    🏦 Банк
+
+                {% elif transaction.account == "bank_account" %}
+
+                    💳 Расчётный счёт
+
+                {% else %}
+
+                    —
+
+                {% endif %}
+
+            </td>
 
 
-</table>
+            <td>
+                {{ "%.2f"|format(transaction.amount) }} ₽
+            </td>
 
+
+            <td>
+                {{ transaction.description or "-" }}
+            </td>
+
+        </tr>
+
+        {% endfor %}
+
+        </tbody>
+
+    </table>
 
 </div>
 

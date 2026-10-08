@@ -218,13 +218,20 @@ def create_money_transfer(
     telegram_user_id: int,
     amount: float,
     purpose: str,
-    comment: str = ""
+    comment: str = "",
+    account: str = "cash"
 ):
+    if account not in ("cash", "bank_account"):
+        raise ValueError(
+            "Неверный счёт. Допустимые значения: cash или bank_account"
+        )
+
     transfer = models.MoneyTransfer(
         telegram_user_id=telegram_user_id,
         amount=amount,
         purpose=purpose,
         comment=comment,
+        account=account,
         status="issued"
     )
 

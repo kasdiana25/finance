@@ -54,14 +54,12 @@
         </span>
 
         <strong>
-
             {{
                 transfers
                 |selectattr("status", "equalto", "issued")
                 |list
                 |length
             }}
-
         </strong>
 
     </div>
@@ -74,14 +72,12 @@
         </span>
 
         <strong>
-
             {{
                 transfers
                 |selectattr("status", "equalto", "closed")
                 |list
                 |length
             }}
-
         </strong>
 
     </div>
@@ -129,6 +125,10 @@
                     </th>
 
                     <th>
+                        Счёт
+                    </th>
+
+                    <th>
                         Назначение
                     </th>
 
@@ -160,9 +160,11 @@
                 <tr>
 
                     <td>
+
                         <strong>
                             {{ transfer.employee_name }}
                         </strong>
+
                     </td>
 
 
@@ -171,6 +173,27 @@
                         <strong class="money-amount">
                             {{ "%.2f"|format(transfer.amount) }} ₽
                         </strong>
+
+                    </td>
+
+
+                    <!-- СЧЁТ -->
+
+                    <td>
+
+                        {% if transfer.account == "cash" %}
+
+                            🏦 Банк
+
+                        {% elif transfer.account == "bank_account" %}
+
+                            💳 Расчётный счёт
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
 
                     </td>
 
@@ -194,21 +217,21 @@
 
                         {% if transfer.status == "issued" %}
 
-                        <span class="badge transfer-issued">
-                            Выдано
-                        </span>
+                            <span class="badge transfer-issued">
+                                Выдано
+                            </span>
 
                         {% elif transfer.status == "closed" %}
 
-                        <span class="badge transfer-closed">
-                            Закрыто
-                        </span>
+                            <span class="badge transfer-closed">
+                                Закрыто
+                            </span>
 
                         {% else %}
 
-                        <span class="badge">
-                            {{ transfer.status }}
-                        </span>
+                            <span class="badge">
+                                {{ transfer.status }}
+                            </span>
 
                         {% endif %}
 
@@ -219,25 +242,25 @@
 
                         {% if transfer.status == "issued" %}
 
-                        <form
-                            method="post"
-                            action="/money-transfers/{{ transfer.id }}/close"
-                        >
-
-                            <button
-                                type="submit"
-                                class="action-button close"
+                            <form
+                                method="post"
+                                action="/money-transfers/{{ transfer.id }}/close"
                             >
-                                Закрыть
-                            </button>
 
-                        </form>
+                                <button
+                                    type="submit"
+                                    class="action-button close"
+                                >
+                                    Закрыть
+                                </button>
+
+                            </form>
 
                         {% else %}
 
-                        <span class="closed-text">
-                            ✓ Завершено
-                        </span>
+                            <span class="closed-text">
+                                ✓ Завершено
+                            </span>
 
                         {% endif %}
 
@@ -245,12 +268,13 @@
 
                 </tr>
 
+
                 {% else %}
 
                 <tr>
 
                     <td
-                        colspan="7"
+                        colspan="8"
                         class="empty-table"
                     >
 
@@ -311,6 +335,9 @@
 
     <div class="transfer-modal-content">
 
+
+        <!-- ЗАГОЛОВОК -->
+
         <div class="transfer-modal-header">
 
             <div>
@@ -341,12 +368,16 @@
         </div>
 
 
+        <!-- ФОРМА -->
+
         <form
             method="post"
             action="/money-transfers"
             class="transfer-form"
         >
 
+
+            <!-- СОТРУДНИК -->
 
             <div class="form-field">
 
@@ -366,9 +397,7 @@
                     {% for employee in employees %}
 
                     <option value="{{ employee.id }}">
-
                         {{ employee.full_name }}
-
                     </option>
 
                     {% endfor %}
@@ -377,6 +406,34 @@
 
             </div>
 
+
+            <!-- СЧЁТ -->
+
+            <div class="form-field">
+
+                <label>
+                    Счёт, с которого выдаются деньги
+                </label>
+
+                <select
+                    name="account"
+                    required
+                >
+
+                    <option value="cash">
+                        🏦 Банк
+                    </option>
+
+                    <option value="bank_account">
+                        💳 Расчётный счёт
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <!-- СУММА -->
 
             <div class="form-field">
 
@@ -404,6 +461,8 @@
             </div>
 
 
+            <!-- НАЗНАЧЕНИЕ -->
+
             <div class="form-field">
 
                 <label>
@@ -420,6 +479,8 @@
             </div>
 
 
+            <!-- КОММЕНТАРИЙ -->
+
             <div class="form-field">
 
                 <label>
@@ -434,6 +495,8 @@
 
             </div>
 
+
+            <!-- КНОПКИ -->
 
             <div class="transfer-modal-actions">
 
@@ -463,20 +526,20 @@
 </div>
 
 
+<!-- =====================================================
+     JAVASCRIPT
+===================================================== -->
+
 <script>
 
 function openTransferModal() {
 
     const modal =
-        document.getElementById(
-            "transferModal"
-        );
+        document.getElementById("transferModal");
 
     modal.classList.add("active");
 
-    document.body.classList.add(
-        "modal-open"
-    );
+    document.body.classList.add("modal-open");
 
 }
 
@@ -484,15 +547,11 @@ function openTransferModal() {
 function closeTransferModal() {
 
     const modal =
-        document.getElementById(
-            "transferModal"
-        );
+        document.getElementById("transferModal");
 
     modal.classList.remove("active");
 
-    document.body.classList.remove(
-        "modal-open"
-    );
+    document.body.classList.remove("modal-open");
 
 }
 
@@ -502,7 +561,9 @@ document.addEventListener(
     function(event) {
 
         if (event.key === "Escape") {
+
             closeTransferModal();
+
         }
 
     }
@@ -728,5 +789,6 @@ body.modal-open {
 }
 
 </style>
+
 
 {% endblock %}

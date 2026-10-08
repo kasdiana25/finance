@@ -307,6 +307,14 @@ class MoneyTransfer(Base):
         Float,
         nullable=False
     )
+     # Счёт, с которого выданы деньги:
+    # cash — Банк (наличные)
+    # bank_account — Расчётный счёт
+    account = Column(
+        String,
+        nullable=False,
+        default="cash"
+    )
 
     purpose = Column(
         String,
