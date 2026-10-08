@@ -4950,10 +4950,19 @@ def main():
         pool_timeout=30,
     )
 
+    get_updates_request = HTTPXRequest(
+        proxy=TELEGRAM_PROXY,
+        connect_timeout=30,
+        read_timeout=30,
+        write_timeout=30,
+        pool_timeout=30,
+    )
+
     application = (
         ApplicationBuilder()
         .token(BOT_TOKEN)
         .request(request)
+        .get_updates_request(get_updates_request)
         .build()
     )
 
