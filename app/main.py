@@ -1276,13 +1276,13 @@ def reports_page(
 def register_pdf_fonts():
     regular = Path(
         os.path.expandvars(
-            r"%LOCALAPPDATA%\Microsoft\Windows\Fonts\DejaVuSans.ttf"
+            r"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
         )
     )
 
     bold = Path(
         os.path.expandvars(
-            r"%LOCALAPPDATA%\Microsoft\Windows\Fonts\DejaVuSans-Bold.ttf"
+            r"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         )
     )
 
