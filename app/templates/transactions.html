@@ -1,4 +1,3 @@
-```html
 {% extends "base.html" %}
 
 {% block title %}
@@ -22,7 +21,6 @@
     </button>
 </div>
 
-
 <!-- ВСЕ ОПЕРАЦИИ -->
 
 <div class="panel">
@@ -35,6 +33,37 @@
             </p>
         </div>
     </div>
+
+    <!-- ФИЛЬТР ПО СЧЁТУ -->
+
+    <div class="transaction-filters">
+        <div class="transaction-filter-heading">
+            <span class="filter-icon">🏦</span>
+
+            <div>
+                <strong>Фильтр по счёту</strong>
+                <small>Выберите, какие операции отображать</small>
+            </div>
+        </div>
+
+        <div class="transaction-filter-controls">
+            <select
+                id="transaction-account-filter"
+                aria-label="Фильтр операций по счёту"
+            >
+                <option value="all">Все операции</option>
+                <option value="cash">Только наличные</option>
+                <option value="bank_account">Только расчётный счёт</option>
+            </select>
+
+            <span
+                id="transaction-filter-count"
+                class="filter-count"
+            ></span>
+        </div>
+    </div>
+
+    <!-- ТАБЛИЦА ОПЕРАЦИЙ -->
 
     <div class="table-wrapper">
 
@@ -56,7 +85,10 @@
 
                 {% for transaction in transactions %}
 
-                <tr data-transaction-row>
+                <tr
+                    data-transaction-row
+                    data-account="{{ transaction.account or '' }}"
+                >
 
                     <!-- Дата -->
                     <td>
@@ -175,7 +207,8 @@
 
     </div>
 
-    <!-- КНОПКА ПОКАЗАТЬ ЕЩЁ -->
+    <!-- ПОКАЗАТЬ ЕЩЁ -->
+
     <div
         id="show-more-container"
         style="display: none; text-align: center; padding: 20px;"
@@ -207,7 +240,6 @@
 
     <div class="transaction-modal-content">
 
-        <!-- Заголовок -->
         <div class="transaction-modal-header">
             <div>
                 <h2>+ Новая операция</h2>
@@ -223,13 +255,12 @@
             </button>
         </div>
 
-        <!-- Форма -->
-        <form
-            method="post"
-            action="/transactions/add"
-        >
+        <!-- ФОРМА -->
+
+        <form method="post" action="/transactions/add">
 
             <!-- ТИП ОПЕРАЦИИ -->
+
             <div class="transaction-type-selector">
 
                 <label class="transaction-type income">
@@ -264,6 +295,7 @@
             </div>
 
             <!-- ИСТОЧНИК ДОХОДА -->
+
             <div
                 class="form-field"
                 id="modal-income-source-field"
@@ -281,6 +313,7 @@
             </div>
 
             <!-- СЧЁТ -->
+
             <div class="form-field">
                 <label>🏦 Счёт</label>
 
@@ -296,6 +329,7 @@
             </div>
 
             <!-- КАТЕГОРИЯ -->
+
             <div
                 class="form-field"
                 id="modal-category-field"
@@ -318,6 +352,7 @@
             </div>
 
             <!-- СОТРУДНИК -->
+
             <div
                 class="form-field"
                 id="modal-paid-to-field"
@@ -346,6 +381,7 @@
             </div>
 
             <!-- ПОЛУЧАТЕЛЬ ВРУЧНУЮ -->
+
             <div
                 class="form-field"
                 id="modal-paid-to-manual-field"
@@ -362,6 +398,7 @@
             </div>
 
             <!-- СУММА -->
+
             <div class="form-field">
                 <label>💵 Сумма</label>
 
@@ -376,6 +413,7 @@
             </div>
 
             <!-- ДАТА -->
+
             <div class="form-field">
                 <label>📅 Дата операции</label>
 
@@ -388,6 +426,7 @@
             </div>
 
             <!-- ОПИСАНИЕ -->
+
             <div class="form-field">
                 <label>📝 Описание</label>
 
@@ -399,6 +438,7 @@
             </div>
 
             <!-- КНОПКИ -->
+
             <div class="transaction-modal-actions">
 
                 <button
@@ -573,59 +613,116 @@ function updateModalSalaryField() {
 
 
 /* =========================================================
-   ПОКАЗ ОПЕРАЦИЙ ПО 7 ЗАПИСЕЙ
+   ФИЛЬТРАЦИЯ И ПАГИНАЦИЯ ПО 7 ОПЕРАЦИЙ
 ========================================================= */
 
 const transactionsPerPage = 7;
 let visibleTransactions = transactionsPerPage;
 
-function initializeTransactionPagination() {
-    const tbody = document.querySelector(
-        '.table-wrapper tbody'
+
+/* Получение операций с учётом выбранного счёта */
+
+function getFilteredTransactionRows() {
+    const rows = Array.from(
+        document.querySelectorAll(
+            '.table-wrapper tbody tr[data-transaction-row]'
+        )
     );
 
-    const showMoreContainer = document.getElementById(
-        'show-more-container'
+    const filter = document.getElementById(
+        'transaction-account-filter'
     );
 
-    if (!tbody || !showMoreContainer) {
-        return;
-    }
+    const selectedAccount = filter ? filter.value : 'all';
 
-    const rows = tbody.querySelectorAll(
-        'tr[data-transaction-row]'
-    );
+    return rows.filter(function(row) {
+        if (selectedAccount === 'all') {
+            return true;
+        }
 
-    visibleTransactions = transactionsPerPage;
-
-    rows.forEach(function(row, index) {
-        row.style.display =
-            index < transactionsPerPage ? '' : 'none';
+        return row.dataset.account === selectedAccount;
     });
-
-    showMoreContainer.style.display =
-        rows.length > transactionsPerPage ? 'block' : 'none';
 }
 
-function showMoreTransactions() {
-    const rows = document.querySelectorAll(
+
+/* Отрисовка отфильтрованных операций */
+
+function renderTransactions() {
+    const allRows = document.querySelectorAll(
         '.table-wrapper tbody tr[data-transaction-row]'
     );
 
+    const filteredRows = getFilteredTransactionRows();
+
     const showMoreContainer = document.getElementById(
         'show-more-container'
     );
 
-    visibleTransactions += transactionsPerPage;
+    const countElement = document.getElementById(
+        'transaction-filter-count'
+    );
 
-    rows.forEach(function(row, index) {
+    /* Сначала скрываем все операции */
+
+    allRows.forEach(function(row) {
+        row.style.display = 'none';
+    });
+
+    /* Показываем только подходящие под фильтр */
+
+    filteredRows.forEach(function(row, index) {
         row.style.display =
             index < visibleTransactions ? '' : 'none';
     });
 
-    if (visibleTransactions >= rows.length) {
-        showMoreContainer.style.display = 'none';
+    /* Кнопка показа следующих записей */
+
+    if (showMoreContainer) {
+        showMoreContainer.style.display =
+            filteredRows.length > visibleTransactions
+                ? 'block'
+                : 'none';
     }
+
+    /* Счётчик операций */
+
+    if (countElement) {
+        countElement.textContent =
+            'Показано ' +
+            Math.min(visibleTransactions, filteredRows.length) +
+            ' из ' +
+            filteredRows.length;
+    }
+}
+
+
+/* Первичная настройка фильтра и пагинации */
+
+function initializeTransactionPagination() {
+    visibleTransactions = transactionsPerPage;
+
+    const filter = document.getElementById(
+        'transaction-account-filter'
+    );
+
+    if (filter && !filter.dataset.initialized) {
+        filter.addEventListener('change', function() {
+            visibleTransactions = transactionsPerPage;
+            renderTransactions();
+        });
+
+        filter.dataset.initialized = 'true';
+    }
+
+    renderTransactions();
+}
+
+
+/* Показ следующих семи операций */
+
+function showMoreTransactions() {
+    visibleTransactions += transactionsPerPage;
+    renderTransactions();
 }
 
 
@@ -647,4 +744,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 {% endblock %}
-```
+

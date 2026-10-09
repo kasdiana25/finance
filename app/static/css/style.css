@@ -3997,3 +3997,91 @@ body.modal-open {
         overflow: auto !important;
     }
 }
+/* ========================================= ФИЛЬТР ОПЕРАЦИЙ ПО СЧЁТУ ========================================= */ 
+.transaction-filters { 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    flex-wrap: wrap; 
+    gap: 18px; 
+    padding: 20px 22px; 
+    margin-bottom: 18px; 
+    background: linear-gradient(135deg, #ffffff, #f8f7ff); 
+    border: 1px solid #e9e6ff; 
+    border-radius: 16px; 
+    box-shadow: 0 5px 20px rgba(48, 42, 110, 0.04); } 
+    
+    .transaction-filter-heading { 
+        display: flex; 
+        align-items: center; 
+        gap: 12px; } 
+        
+    .transaction-filter-heading .filter-icon { 
+        display: grid; 
+        width: 44px; 
+        height: 44px; 
+        flex-shrink: 0; 
+        place-items: center; 
+        font-size: 21px; 
+        background: #eeebff; 
+        border-radius: 13px; } 
+        
+    .transaction-filter-heading strong, 
+    .transaction-filter-heading small 
+    { display: block; } 
+    
+    .transaction-filter-heading strong { 
+        color: #252640; 
+        font-size: 14px; 
+        font-weight: 750; } 
+        
+        
+    .transaction-filter-heading small { 
+        margin-top: 3px; 
+        color: #8589a2; 
+        font-size: 12px; } 
+        
+        
+    .transaction-filter-controls { 
+        display: flex; 
+        align-items: center; 
+        flex-wrap: wrap; gap: 12px; } 
+        
+    #transaction-account-filter { 
+        min-width: 230px; 
+        padding: 11px 38px 11px 14px; 
+        color: #393653; 
+        background: #ffffff; 
+        border: 1px solid #e2defa; 
+        border-radius: 11px; 
+        outline: none; 
+        cursor: pointer; 
+        transition: border-color 0.2s ease, box-shadow 0.2s ease; } 
+        
+        
+    #transaction-account-filter:focus { 
+        border-color: #7867eb; 
+        box-shadow: 0 0 0 4px rgba(120, 103, 235, 0.12); } 
+        
+    .filter-count { 
+        color: #777b95; 
+        font-size: 12px; 
+        white-space: nowrap; }
+        
+        
+    @media (max-width: 600px) 
+    
+    { .transaction-filters { 
+        align-items: stretch; 
+        flex-direction: column; 
+        padding: 16px; } 
+        
+    .transaction-filter-controls { 
+        align-items: stretch; 
+        flex-direction: column; } 
+
+    #transaction-account-filter { 
+        width: 100%; 
+        min-width: 0; 
+    } 
+}
