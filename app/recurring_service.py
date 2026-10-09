@@ -37,7 +37,11 @@ def generate_recurring_transactions(db):
 
                 date=payment.next_payment_date,
 
-                recurring_id=payment.id
+                recurring_id=payment.id,
+
+                account=payment.account,
+                
+                card_name=payment.card_name
             )
 
 

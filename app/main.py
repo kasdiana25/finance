@@ -2406,6 +2406,63 @@ def recurring_page(
     )
 
 
+
+@app.post("/recurring-page")
+def create_recurring_page(
+    name: str = Form(...),
+    amount: float = Form(...),
+    type: str = Form(...),
+    category: str = Form(...),
+    frequency: str = Form(...),
+    next_payment_date: str = Form(...),
+    description: str = Form(""),
+    account: str = Form(...),
+    card_name: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    from datetime import date as date_type
+    from fastapi.responses import RedirectResponse
+
+    if account not in ("cash", "bank_account"):
+        raise HTTPException(
+            status_code=400,
+            detail="Неверно указан счёт"
+        )
+
+    if account == "bank_account" and not card_name.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите название карты"
+        )
+
+    payment_date = date_type.fromisoformat(
+        next_payment_date
+    )
+
+    data = schemas.RecurringTransactionCreate(
+        name=name,
+        amount=amount,
+        type=type,
+        category=category,
+        frequency=frequency,
+        day_of_month=payment_date.day,
+        next_payment_date=payment_date,
+        description=description,
+        account=account,
+        card_name=(
+            card_name.strip()
+            if account == "bank_account"
+            else None
+        )
+    )
+
+    crud.create_recurring_transaction(db, data)
+
+    return RedirectResponse(
+        url="/recurring-page",
+        status_code=303
+    )
+
 # =========================================================
 # INVENTORY
 # =========================================================

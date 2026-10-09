@@ -1,147 +1,305 @@
 {% extends "base.html" %}
 
-{% block title %}Подписки — Finance Max Alice{% endblock %}
+{% block title %}Подписки{% endblock %}
 
 {% block content %}
+<style>
+    .recurring-page { max-width: 1400px; margin: 0 auto; }
+    .recurring-header {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+    }
+    .recurring-header h1 { margin: 0 0 6px; }
+    .recurring-header p { margin: 0; opacity: .72; }
+    .recurring-add-btn {
+        border: 0; border-radius: 10px; padding: 11px 17px;
+        cursor: pointer; font: inherit; font-weight: 600;
+        background: var(--primary-color, #2563eb); color: #fff;
+    }
+    .recurring-add-btn:hover { filter: brightness(.95); }
+    .recurring-panel {
+        border: 1px solid var(--border-color, #e5e7eb);
+        border-radius: 14px; padding: 18px; overflow: hidden;
+        background: var(--card-background, var(--surface-color, transparent));
+    }
+    .recurring-table-wrap { width: 100%; overflow-x: auto; }
+    .recurring-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    .recurring-table th, .recurring-table td {
+        text-align: left; padding: 12px 14px;
+        border-bottom: 1px solid var(--border-color, #e5e7eb); vertical-align: top;
+    }
+    .recurring-table th { font-size: .9rem; opacity: .75; font-weight: 600; }
+    .recurring-table tbody tr:last-child td { border-bottom: 0; }
+    .recurring-empty { padding: 30px 12px; text-align: center; opacity: .7; }
+    .recurring-status {
+        display: inline-block; padding: 4px 9px; border-radius: 999px;
+        font-size: .82rem; background: #dcfce7; color: #166534;
+    }
+    .recurring-status.inactive { background: #f3f4f6; color: #4b5563; }
 
-<div class="dashboard-header">
+    .subscription-modal[hidden] { display: none !important; }
+    .subscription-modal {
+        position: fixed; inset: 0; z-index: 9999; display: flex;
+        align-items: center; justify-content: center; padding: 18px;
+    }
+    .subscription-modal-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, .58); }
+    .subscription-modal-dialog {
+        position: relative; width: min(720px, 100%); max-height: calc(100vh - 36px);
+        overflow-y: auto; border-radius: 16px; padding: 24px;
+        background: var(--card-background, var(--surface-color, #fff));
+        color: var(--text-color, inherit); box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .subscription-modal-head {
+        display: flex; align-items: flex-start; justify-content: space-between;
+        gap: 16px; margin-bottom: 20px;
+    }
+    .subscription-modal-head h2 { margin: 0 0 5px; }
+    .subscription-modal-head p { margin: 0; opacity: .7; font-size: .92rem; }
+    .subscription-modal-close {
+        border: 0; background: transparent; font-size: 1.7rem; line-height: 1;
+        cursor: pointer; padding: 0 4px; color: inherit;
+    }
+    .subscription-form-grid {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+    }
+    .subscription-form-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+    .subscription-form-field.full-width { grid-column: 1 / -1; }
+    .subscription-form-field label { font-size: .92rem; font-weight: 600; }
+    .subscription-form-field input, .subscription-form-field select, .subscription-form-field textarea {
+        width: 100%; box-sizing: border-box; border: 1px solid var(--border-color, #d1d5db);
+        border-radius: 9px; padding: 10px 11px; font: inherit;
+        color: inherit; background: var(--input-background, transparent);
+    }
+    .subscription-form-field textarea { resize: vertical; min-height: 76px; }
+    .subscription-form-hint { font-size: .8rem; opacity: .65; font-weight: 400; }
+    .subscription-form-actions {
+        display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
+        margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border-color, #e5e7eb);
+    }
+    .subscription-btn-secondary, .subscription-btn-primary {
+        border-radius: 9px; padding: 10px 15px; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .subscription-btn-secondary { border: 1px solid var(--border-color, #d1d5db); background: transparent; color: inherit; }
+    .subscription-btn-primary { border: 0; background: var(--primary-color, #2563eb); color: white; }
+    @media (max-width: 600px) {
+        .subscription-form-grid { grid-template-columns: 1fr; }
+        .subscription-form-field.full-width { grid-column: auto; }
+        .subscription-modal-dialog { padding: 18px; }
+        .recurring-panel { padding: 10px; }
+    }
+</style>
 
-    <div>
-
-        <span class="section-label">
-            РЕГУЛЯРНЫЕ ПЛАТЕЖИ
-        </span>
-
-        <h1>
-            🔄 Подписки
-        </h1>
-
-        <p>
-            Автоматические регулярные списания компании
-        </p>
-
-    </div>
-
-</div>
-
-
-<div class="panel">
-
-    <div class="panel-header">
-
+<div class="recurring-page">
+    <div class="recurring-header">
         <div>
-
-            <h2>
-                Активные платежи
-            </h2>
-
-            <p>
-                Всего подписок: {{ recurring|length }}
-            </p>
-
+            <h1>🔄 Подписки</h1>
+            <p>Регулярные платежи и автоматические списания</p>
         </div>
-
+        <button type="button" class="recurring-add-btn" id="open-subscription-modal">
+            ＋ Добавить подписку
+        </button>
     </div>
 
-
-    {% if recurring %}
-
-        <div class="table-wrapper">
-
-            <table>
-
+    <div class="recurring-panel">
+        {% if recurring %}
+        <div class="recurring-table-wrap">
+            <table class="recurring-table">
                 <thead>
-
                     <tr>
                         <th>Название</th>
                         <th>Категория</th>
                         <th>Сумма</th>
                         <th>Периодичность</th>
-                        <th>Дата списания</th>
+                        <th>Следующий платёж</th>
+                        <th>Счёт / карта</th>
                         <th>Статус</th>
                     </tr>
-
                 </thead>
-
-
                 <tbody>
-
                     {% for item in recurring %}
-
-                        <tr>
-
-                            <td>
-                                <strong>
-                                    {{ item.name }}
-                                </strong>
-                            </td>
-
-                            <td>
-                                {{ item.category }}
-                            </td>
-
-                            <td>
-                                {{ item.amount }} ₽
-                            </td>
-
-                            <td>
-                                {% if item.frequency == "monthly" %}
-                                    Ежемесячно
-                                {% elif item.frequency == "weekly" %}
-                                    Еженедельно
-                                {% else %}
-                                    {{ item.frequency }}
-                                {% endif %}
-                            </td>
-
-                            <td>
-                                {{ item.next_payment_date }}
-                            </td>
-
-                            <td>
-
-                                {% if item.is_active %}
-
-                                    <span class="badge">
-                                        Активна
-                                    </span>
-
-                                {% else %}
-
-                                    <span class="badge">
-                                        Отключена
-                                    </span>
-
-                                {% endif %}
-
-                            </td>
-
-                        </tr>
-
+                    <tr>
+                        <td>
+                            <strong>{{ item.name }}</strong>
+                            {% if item.description %}
+                                <div class="subscription-form-hint">{{ item.description }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.category }}</td>
+                        <td>{{ "%.2f"|format(item.amount) }} ₽</td>
+                        <td>
+                            {% if item.frequency == "monthly" %}
+                                Ежемесячно
+                            {% elif item.frequency == "weekly" %}
+                                Еженедельно
+                            {% elif item.frequency == "yearly" %}
+                                Ежегодно
+                            {% else %}
+                                {{ item.frequency }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.next_payment_date %}
+                                {{ item.next_payment_date.strftime('%d.%m.%Y') }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.account == "bank_account" %}
+                                Расчётный счёт{% if item.card_name %}<div class="subscription-form-hint">{{ item.card_name }}</div>{% endif %}
+                            {% elif item.account == "cash" %}
+                                Наличные
+                            {% else %}
+                                Не указан
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.is_active %}
+                                <span class="recurring-status">Активна</span>
+                            {% else %}
+                                <span class="recurring-status inactive">Неактивна</span>
+                            {% endif %}
+                        </td>
+                    </tr>
                     {% endfor %}
-
                 </tbody>
-
             </table>
-
         </div>
-
-    {% else %}
-
-        <div class="empty-state">
-
-            <h3>
-                Подписок пока нет
-            </h3>
-
-            <p>
-                Здесь будут отображаться регулярные платежи.
-            </p>
-
+        {% else %}
+        <div class="recurring-empty">
+            <div style="font-size: 2rem; margin-bottom: 8px;">📅</div>
+            <strong>Подписок пока нет</strong>
+            <p>Нажмите «Добавить подписку», чтобы создать первый регулярный платёж.</p>
         </div>
-
-    {% endif %}
-
+        {% endif %}
+    </div>
 </div>
 
+<div class="subscription-modal" id="subscription-modal" hidden>
+    <div class="subscription-modal-backdrop" data-close-subscription-modal></div>
+    <section class="subscription-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="subscription-modal-title">
+        <div class="subscription-modal-head">
+            <div>
+                <h2 id="subscription-modal-title">Добавить подписку</h2>
+                <p>Заполните данные регулярного платежа.</p>
+            </div>
+            <button type="button" class="subscription-modal-close" aria-label="Закрыть" data-close-subscription-modal>&times;</button>
+        </div>
+
+        <form method="post" action="/recurring-page" id="subscription-form">
+            <div class="subscription-form-grid">
+                <div class="subscription-form-field">
+                    <label for="subscription-name">Название *</label>
+                    <input id="subscription-name" type="text" name="name" placeholder="Например, аренда сервера" required>
+                </div>
+
+                <div class="subscription-form-field">
+                    <label for="subscription-amount">Сумма, ₽ *</label>
+                    <input id="subscription-amount" type="number" name="amount" min="0.01" step="0.01" placeholder="0.00" required>
+                </div>
+
+                <div class="subscription-form-field">
+                    <label for="subscription-type">Тип операции *</label>
+                    <select id="subscription-type" name="type" required>
+                        <option value="expense" selected>Расход</option>
+                        <option value="income">Доход</option>
+                    </select>
+                </div>
+
+                <div class="subscription-form-field">
+                    <label for="subscription-category">Категория *</label>
+                    <input id="subscription-category" type="text" name="category" placeholder="Например, Подписки" required>
+                </div>
+
+                <div class="subscription-form-field">
+                    <label for="subscription-frequency">Периодичность *</label>
+                    <select id="subscription-frequency" name="frequency" required>
+                        <option value="monthly" selected>Ежемесячно</option>
+                        <option value="weekly">Еженедельно</option>
+                        <option value="yearly">Ежегодно</option>
+                    </select>
+                </div>
+
+                <div class="subscription-form-field">
+                    <label for="subscription-date">Дата следующего платежа *</label>
+                    <input id="subscription-date" type="date" name="next_payment_date" required>
+                </div>
+
+                <div class="subscription-form-field">
+                    <label for="subscription-account">Счёт списания *</label>
+                    <select id="subscription-account" name="account" required>
+                        <option value="bank_account" selected>Расчётный счёт</option>
+                        <option value="cash">Наличные</option>
+                    </select>
+                </div>
+
+                <div class="subscription-form-field" id="subscription-card-field">
+                    <label for="subscription-card-name">Какая карта? *</label>
+                    <input id="subscription-card-name" type="text" name="card_name" placeholder="Например, Сбербанк — корпоративная">
+                    <span class="subscription-form-hint">Укажите название карты или счёта, с которого списываются деньги.</span>
+                </div>
+
+                <div class="subscription-form-field full-width">
+                    <label for="subscription-description">Описание</label>
+                    <textarea id="subscription-description" name="description" placeholder="Дополнительная информация (необязательно)"></textarea>
+                </div>
+            </div>
+
+            <div class="subscription-form-actions">
+                <button type="button" class="subscription-btn-secondary" data-close-subscription-modal>Отмена</button>
+                <button type="submit" class="subscription-btn-primary">Сохранить подписку</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<script>
+(function () {
+    const modal = document.getElementById('subscription-modal');
+    const openButton = document.getElementById('open-subscription-modal');
+    const accountSelect = document.getElementById('subscription-account');
+    const cardField = document.getElementById('subscription-card-field');
+    const cardInput = document.getElementById('subscription-card-name');
+    const dateInput = document.getElementById('subscription-date');
+
+    function openModal() {
+        modal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        updateCardField();
+        const firstInput = document.getElementById('subscription-name');
+        if (firstInput) firstInput.focus();
+    }
+
+    function closeModal() {
+        modal.hidden = true;
+        document.body.style.overflow = '';
+        openButton.focus();
+    }
+
+    function updateCardField() {
+        const isBankAccount = accountSelect.value === 'bank_account';
+        cardField.hidden = !isBankAccount;
+        cardInput.required = isBankAccount;
+        if (!isBankAccount) cardInput.value = '';
+    }
+
+    openButton.addEventListener('click', openModal);
+    modal.querySelectorAll('[data-close-subscription-modal]').forEach(function (element) {
+        element.addEventListener('click', closeModal);
+    });
+    accountSelect.addEventListener('change', updateCardField);
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !modal.hidden) closeModal();
+    });
+
+    // Подставляем сегодняшнюю дату как удобное начальное значение.
+    if (dateInput && !dateInput.value) {
+        const now = new Date();
+        const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+            .toISOString().slice(0, 10);
+        dateInput.value = localDate;
+    }
+})();
+</script>
 {% endblock %}

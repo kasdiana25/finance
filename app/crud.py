@@ -139,10 +139,7 @@ def get_recurring_transactions(db):
     ).all()
 
 
-def create_recurring_transaction(
-    db,
-    data
-):
+def create_recurring_transaction(db, data):
     payment = RecurringTransaction(
         name=data.name,
         amount=data.amount,
@@ -151,13 +148,14 @@ def create_recurring_transaction(
         frequency=data.frequency,
         day_of_month=data.day_of_month,
         next_payment_date=data.next_payment_date,
-        description=data.description
+        description=data.description,
+        account=data.account,
+        card_name=data.card_name
     )
 
     db.add(payment)
     db.commit()
     db.refresh(payment)
-
     return payment
 
 

@@ -153,6 +153,17 @@ class RecurringTransaction(Base):
         String,
         default=""
     )
+    account = Column(
+        String,
+        nullable=True,
+        default=None
+    )
+
+    card_name = Column(
+        String,
+        nullable=True,
+        default=None
+    )
 
 # =========================================================
 # УВЕДОМЛЕНИЯ

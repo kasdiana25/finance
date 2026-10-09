@@ -45,6 +45,9 @@ class RecurringTransactionCreate(BaseModel):
     next_payment_date: date
     description: str = ""
 
+    account: str = "bank_account"
+    card_name: Optional[str] = None
+
 
 class RecurringTransactionResponse(RecurringTransactionCreate):
     id: int
