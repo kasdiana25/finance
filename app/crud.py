@@ -8,11 +8,14 @@ from .models import RecurringTransaction
 # =========================================================
 
 def get_transactions(db: Session):
-    return db.query(
-        models.Transaction
-    ).order_by(
-        models.Transaction.date.desc()
-    ).all()
+    return (
+        db.query(models.Transaction)
+        .order_by(
+            models.Transaction.date.desc(),
+            models.Transaction.id.desc()
+        )
+        .all()
+    )
 
 
 def get_transaction(

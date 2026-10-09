@@ -39,9 +39,7 @@ def generate_recurring_transactions(db):
 
                 recurring_id=payment.id,
 
-                account=payment.account,
-                
-                card_name=payment.card_name
+                account=payment.account
             )
 
 
