@@ -213,107 +213,121 @@
                     </td>
 
 
-                    <td>
+                    
+<td>
 
-                        {% if transfer.status == "issued" %}
+    {% if transfer.status == "issued" %}
 
-                            <span class="badge transfer-issued">
-                                Выдано
-                            </span>
+        <span class="badge transfer-issued">
+            Выдано
+        </span>
 
-                        {% elif transfer.status == "closed" %}
+    {% elif transfer.status == "partially_spent" %}
 
-                            <span class="badge transfer-closed">
-                                Закрыто
-                            </span>
+        <span class="badge">
+            Частично потрачено
+        </span>
 
-                        {% else %}
+    {% elif transfer.status == "completed" %}
 
-                            <span class="badge">
-                                {{ transfer.status }}
-                            </span>
+        <span class="badge">
+            Полностью потрачено
+        </span>
 
-                        {% endif %}
+    {% elif transfer.status == "closed" %}
 
-                    </td>
+        <span class="badge transfer-closed">
+            Закрыто
+        </span>
 
+    {% else %}
 
-                    <td>
+        <span class="badge">
+            Неизвестный статус
+        </span>
 
-                        {% if transfer.status == "issued" %}
+    {% endif %}
 
-                            <form
-                                method="post"
-                                action="/money-transfers/{{ transfer.id }}/close"
-                            >
-
-                                <button
-                                    type="submit"
-                                    class="action-button close"
-                                >
-                                    Закрыть
-                                </button>
-
-                            </form>
-
-                        {% else %}
-
-                            <span class="closed-text">
-                                ✓ Завершено
-                            </span>
-
-                        {% endif %}
-
-                    </td>
-
-                </tr>
+</td>
 
 
-                {% else %}
+<td>
 
-                <tr>
+    {% if transfer.status != "closed" %}
 
-                    <td
-                        colspan="8"
-                        class="empty-table"
-                    >
+        <form
+            method="post"
+            action="/money-transfers/{{ transfer.id }}/close"
+            onsubmit="return confirm('Вы уверены, что хотите закрыть эту выдачу?');"
+        >
 
-                        <div class="empty-table-content">
+            <button
+                type="submit"
+                class="action-button close"
+            >
+                Закрыть
+            </button>
 
-                            <div class="empty-table-icon">
-                                💰
-                            </div>
+        </form>
 
-                            <h3>
-                                Денег пока не выдавали
-                            </h3>
+    {% else %}
 
-                            <p>
-                                Нажмите «Выдать деньги»,
-                                чтобы создать первую выдачу.
-                            </p>
+        <span class="closed-text">
+            ✓ Закрыто
+        </span>
 
-                            <button
-                                type="button"
-                                class="main-button"
-                                onclick="openTransferModal()"
-                            >
-                                + Выдать деньги
-                            </button>
+    {% endif %}
 
-                        </div>
+</td>
 
-                    </td>
+</tr>
 
-                </tr>
 
-                {% endfor %}
+{% else %}
 
-            </tbody>
+<tr>
 
-        </table>
+    <td
+        colspan="8"
+        class="empty-table"
+    >
 
-    </div>
+        <div class="empty-table-content">
+
+            <div class="empty-table-icon">
+                💰
+            </div>
+
+            <h3>
+                Денег пока не выдавали
+            </h3>
+
+            <p>
+                Нажмите «Выдать деньги»,
+                чтобы создать первую выдачу.
+            </p>
+
+            <button
+                type="button"
+                class="main-button"
+                onclick="openTransferModal()"
+            >
+                + Выдать деньги
+            </button>
+
+        </div>
+
+    </td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
 
 </div>
 

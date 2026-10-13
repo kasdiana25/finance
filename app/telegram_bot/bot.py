@@ -184,34 +184,22 @@ def get_active_money_transfer(
 # СТАТУС ВЫДАЧИ
 # =========================================================
 
-def update_transfer_status(
-    db,
-    transfer
-):
+def update_transfer_status(db, transfer):
     """
-    Обновляет статус выдачи:
-    issued
-    partially_spent
-    completed
+    Автоматически обновляет только состояние расходования.
+    Закрыть выдачу (closed) может исключительно директор.
     """
 
-    spent_amount = get_transfer_spent_amount(
-        db,
-        transfer.id
-    )
+    if transfer.status == "closed":
+        return
 
-    transfer_amount = float(
-        transfer.amount
-    )
+    spent_amount = get_transfer_spent_amount(db, transfer.id)
+    transfer_amount = float(transfer.amount)
 
     if spent_amount <= 0:
         transfer.status = "issued"
-
-    elif spent_amount < transfer_amount:
-        transfer.status = "partially_spent"
-
     else:
-        transfer.status = "completed"
+        transfer.status = "partially_spent"
 
 
 # =========================================================
@@ -220,18 +208,13 @@ def update_transfer_status(
 
 def get_employee_balance(db, user_internal_id: int) -> float:
     """
-    Рассчитывает доступный остаток денег сотрудника.
+    Общий остаток денег сотрудника.
 
-    Учитываются только активные выдачи:
-    - issued
-    - partially_spent
+    Учитываются все незакрытые выдачи:
+    issued, partially_spent, completed.
 
-    Закрытые (closed) и завершённые (completed)
-    выдачи сохраняются в истории, но не
-    учитываются в доступном остатке.
-
-    Расходы рассчитываются отдельно
-    для каждой активной выдачи.
+    Из общей суммы вычитаются все расходы,
+    привязанные к этим выдачам.
     """
 
     transfers = (
@@ -240,27 +223,24 @@ def get_employee_balance(db, user_internal_id: int) -> float:
             MoneyTransfer.telegram_user_id == user_internal_id,
             MoneyTransfer.status.in_([
                 "issued",
-                "partially_spent"
+                "partially_spent",
+                "completed"
             ])
         )
         .all()
     )
 
-    total_balance = 0.0
+    total_issued = sum(
+        float(transfer.amount)
+        for transfer in transfers
+    )
 
-    for transfer in transfers:
+    total_spent = sum(
+        float(get_transfer_spent_amount(db, transfer.id))
+        for transfer in transfers
+    )
 
-        spent_amount = get_transfer_spent_amount(
-            db,
-            transfer.id
-        )
-
-        remaining = (
-            float(transfer.amount)
-            - float(spent_amount)
-        )
-
-        total_balance += max(remaining, 0.0)
+    total_balance = total_issued - total_spent
 
     return round(total_balance, 2)
 
