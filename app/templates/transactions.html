@@ -125,7 +125,7 @@
                             {% elif transaction.income_source == "show" %}
                                 Показы
                             {% else %}
-                                —
+                                {{ transaction.income_source or "—" }}
                             {% endif %}
                         {% else %}
                             —

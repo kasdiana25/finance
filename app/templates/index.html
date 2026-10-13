@@ -189,6 +189,7 @@
     </div>
 
 
+    <div class="table-wrapper">
     <table>
 
         <thead>
@@ -238,7 +239,7 @@
 
 
             <td>
-                {{ transaction.category }}
+                {{ transaction.category or "—" }}
             </td>
 
             <td>
@@ -258,7 +259,7 @@
 
                 {% elif transaction.account == "bank_account" %}
 
-                    💳 Расчётный счёт
+                    Расчётный счёт
 
                 {% else %}
 
@@ -293,6 +294,7 @@
         </tbody>
 
     </table>
+    </div>
 
 </div>
 
