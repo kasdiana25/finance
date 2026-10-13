@@ -6,10 +6,13 @@ from pydantic import BaseModel, Field
 
 class TransactionCreate(BaseModel):
     type: str = Field(..., pattern="^(income|expense)$")
-    category: str
     amount: float = Field(..., gt=0)
-    description: Optional[str] = None
     date: date
+
+    # Категория обязательна только для расходов
+    category: Optional[str] = None
+
+    description: Optional[str] = None
 
     # Для доходов: investment / show
     income_source: Optional[str] = Field(
@@ -26,6 +29,22 @@ class TransactionCreate(BaseModel):
     # Заполняется для зарплаты
     employee_id: Optional[int] = None
     paid_to: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_transaction(self):
+        if self.type == "expense" and not self.category:
+            raise ValueError(
+                "Для расхода необходимо выбрать категорию"
+            )
+
+        if self.type == "income":
+            self.category = None
+            self.employee_id = None
+            self.paid_to = None
+        else:
+            self.income_source = None
+
+        return self
 
 
 class TransactionResponse(TransactionCreate):

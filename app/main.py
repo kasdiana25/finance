@@ -2320,22 +2320,48 @@ def add_transaction_page(
     )
 
 
-@app.post(
-    "/transactions/add"
-)
+@app.post("/transactions/add")
 def add_transaction_form(
     type: str = Form(...),
-    category: str = Form(...),
+    category: str | None = Form(None),
     amount: float = Form(...),
     date: str = Form(...),
     description: str = Form(""),
-    income_source: str = Form(None),
-    account: str = Form(None),
-    employee_id: int = Form(None),
-    paid_to: str = Form(None),
+    income_source: str | None = Form(None),
+    account: str | None = Form(None),
+    employee_id: int | None = Form(None),
+    paid_to: str | None = Form(None),
     db: Session = Depends(get_db)
 ):
     from datetime import date as date_type
+
+    # Проверяем тип операции
+    if type not in ["income", "expense"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Неверный тип операции"
+        )
+
+    # Для дохода категория не нужна
+    if type == "income":
+        category = None
+        employee_id = None
+        paid_to = None
+
+    # Для расхода категория обязательна
+    if type == "expense":
+        income_source = None
+
+        if not category:
+            raise HTTPException(
+                status_code=400,
+                detail="Выберите категорию расхода"
+            )
+
+        # Поля зарплаты только для соответствующей категории
+        if category != "Заработная плата":
+            employee_id = None
+            paid_to = None
 
     transaction = schemas.TransactionCreate(
         type=type,
@@ -2358,7 +2384,6 @@ def add_transaction_form(
         "/transactions-page",
         status_code=303
     )
-
 
 # =========================================================
 # HTML FORECAST
