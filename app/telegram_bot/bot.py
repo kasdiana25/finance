@@ -220,52 +220,49 @@ def update_transfer_status(
 
 def get_employee_balance(db, user_internal_id: int) -> float:
     """
-    Остаток сотрудника:
-    все выдачи минус все записанные расходы.
+    Рассчитывает доступный остаток денег сотрудника.
 
-    Расход списывается сразу, как только сотрудник
-    сообщил о нём (не ждём чек).
+    Учитываются только активные выдачи:
+    - issued
+    - partially_spent
+
+    Закрытые (closed) и завершённые (completed)
+    выдачи сохраняются в истории, но не
+    учитываются в доступном остатке.
+
+    Расходы рассчитываются отдельно
+    для каждой активной выдачи.
     """
-    user = (
-        db.query(TelegramUser)
-        .filter(TelegramUser.id == user_internal_id)
-        .first()
-    )
-    if not user:
-        return 0.0
 
     transfers = (
         db.query(MoneyTransfer)
         .filter(
-            MoneyTransfer.telegram_user_id == user_internal_id
-        )
-        .all()
-    )
-    total_issued = sum(float(t.amount) for t in transfers)
-
-    expenses = (
-        db.query(EmployeeExpense)
-        .filter(
-            EmployeeExpense.telegram_user_id == user.telegram_id
+            MoneyTransfer.telegram_user_id == user_internal_id,
+            MoneyTransfer.status.in_([
+                "issued",
+                "partially_spent"
+            ])
         )
         .all()
     )
 
-    total_spent = 0.0
-    for expense in expenses:
-        transaction = (
-            db.query(Transaction)
-            .filter(Transaction.id == expense.transaction_id)
-            .first()
+    total_balance = 0.0
+
+    for transfer in transfers:
+
+        spent_amount = get_transfer_spent_amount(
+            db,
+            transfer.id
         )
-        if transaction:
-            total_spent += float(transaction.amount)
 
-    balance = total_issued - total_spent
-    if balance < 0:
-        balance = 0.0
+        remaining = (
+            float(transfer.amount)
+            - float(spent_amount)
+        )
 
-    return balance
+        total_balance += max(remaining, 0.0)
+
+    return round(total_balance, 2)
 
 
 def get_employee_issued_spent(db, user_internal_id: int):
