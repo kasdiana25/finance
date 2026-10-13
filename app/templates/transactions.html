@@ -145,9 +145,8 @@
 
                     <!-- Кому выдано -->
                     <td>
-                        {% if transaction.type == "expense"
-                              and transaction.category == "Заработная плата" %}
-                            {{ transaction.paid_to or "—" }}
+                        {% if transaction.type == "expense" %}
+                            {{ employee_names.get(transaction.employee_id) or transaction.paid_to or "—" }}
                         {% else %}
                             —
                         {% endif %}

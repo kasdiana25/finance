@@ -2924,12 +2924,32 @@ async def director_operations_history(
                 if t.date
                 else "—"
             )
-            lines.append(
-                f"{type_emoji} {type_name}: {float(t.amount):,.2f} ₽\n"
-                f"  📂 {t.category or '—'}\n"
-                f"  📝 {t.description or '—'}\n"
-                f"  📅 {date_text}"
-            )
+            details = [
+                f"{type_emoji} {type_name}: {float(t.amount):,.2f} ₽",
+                f"  📂 {t.category or '—'}",
+            ]
+            if t.type == "income":
+                source_label = {
+                    "investment": "Инвестиции",
+                    "show": "Показы",
+                }.get(t.income_source, t.income_source or "—")
+                details.append(f"  💼 Источник дохода: {source_label}")
+            account_label = ACCOUNT_LABELS.get(t.account, t.account or "—")
+            details.append(f"  🏦 Счёт: {account_label}")
+            if t.type == "expense":
+                recipient = t.paid_to
+                if t.employee_id:
+                    employee = db.query(TelegramUser).filter(
+                        TelegramUser.id == t.employee_id
+                    ).first()
+                    if employee:
+                        recipient = employee.full_name or recipient
+                details.append(f"  👤 Кому выдано: {recipient or '—'}")
+            details.extend([
+                f"  📝 {t.description or '—'}",
+                f"  📅 {date_text}",
+            ])
+            lines.append("\n".join(details))
 
         text = "\n\n".join(lines)
 
@@ -3079,12 +3099,12 @@ async def director_money_transfers(
 
                 status_text = "🟢 Закрыто"
 
-            account_raw = getattr(transfer, "account", None) or "cash"
-            account_label = ACCOUNT_LABELS.get(account_raw, account_raw)
+            account_raw = transfer.account
+            account_label = ACCOUNT_LABELS.get(account_raw, account_raw or "—")
 
             lines.append(
                 f"👤 {employee_name}\n"
-                f"🏦 Счёт: {account_label}\n"
+                f"🏦 Счёт списания: {account_label}\n"
                 f"💰 Выдано: "
                 f"{transfer.amount:,.2f} ₽\n"
                 f"💸 Потрачено: "

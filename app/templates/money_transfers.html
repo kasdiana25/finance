@@ -117,7 +117,7 @@
                 <tr>
 
                     <th>
-                        Сотрудник
+                        Кому выдано
                     </th>
 
                     <th>
@@ -125,7 +125,7 @@
                     </th>
 
                     <th>
-                        Счёт
+                        Счёт списания
                     </th>
 
                     <th>
@@ -183,7 +183,7 @@
 
                         {% if transfer.account == "cash" %}
 
-                            🏦 Банк
+                            Наличные
 
                         {% elif transfer.account == "bank_account" %}
 
@@ -435,7 +435,7 @@
                 >
 
                     <option value="cash">
-                        🏦 Банк
+                        Наличные
                     </option>
 
                     <option value="bank_account">

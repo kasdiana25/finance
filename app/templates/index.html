@@ -197,7 +197,9 @@
             <th>Дата</th>
             <th>Тип</th>
             <th>Категория</th>
+            <th>Источник дохода</th>
             <th>Счёт</th>
+            <th>Кому выдано</th>
             <th>Сумма</th>
             <th>Описание</th>
         </tr>
@@ -239,12 +241,20 @@
                 {{ transaction.category }}
             </td>
 
+            <td>
+                {% if transaction.type == "income" %}
+                    {{ {"investment": "Инвестиции", "show": "Показы"}.get(transaction.income_source, transaction.income_source or "—") }}
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+
 
             <td>
 
                 {% if transaction.account == "cash" %}
 
-                    🏦 Банк
+                    Наличные
 
                 {% elif transaction.account == "bank_account" %}
 
@@ -258,6 +268,14 @@
 
             </td>
 
+
+            <td>
+                {% if transaction.type == "expense" %}
+                    {{ employee_names.get(transaction.employee_id) or transaction.paid_to or "—" }}
+                {% else %}
+                    —
+                {% endif %}
+            </td>
 
             <td>
                 {{ "%.2f"|format(transaction.amount) }} ₽

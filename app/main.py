@@ -2265,6 +2265,10 @@ def home(
         name="index.html",
         context={
             "transactions": transactions[:10],
+            "employee_names": {
+                employee.id: employee.full_name
+                for employee in db.query(models.TelegramUser).all()
+            },
             "statistics": statistics
         }
     )
@@ -2288,7 +2292,11 @@ def transactions_page(
         request=request,
         name="transactions.html",
         context={
-            "transactions": transactions
+            "transactions": transactions,
+            "employee_names": {
+                employee.id: employee.full_name
+                for employee in db.query(models.TelegramUser).all()
+            }
         }
     )
 
