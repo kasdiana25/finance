@@ -39,6 +39,8 @@ from ..models import (
 
 from .roles import get_user, create_user
 from .receipt_ocr import recognize_receipt
+from ..statistics import get_statistics
+from ..accounting import operation_rows
 
 
 # =========================================================
@@ -1907,6 +1909,9 @@ async def create_transaction_from_receipt(
             category=category,
             amount=amount,
             description=description,
+            account=transfer.account if transfer else None,
+            employee_id=user.id,
+            paid_to=user.full_name,
             date=(
                 receipt.receipt_date
                 or date.today()
@@ -2884,18 +2889,9 @@ async def director_operations_history(
 
     try:
         # Сортировка по дате (новые сверху), потом по id
-        transactions = (
-            db.query(Transaction)
-            .order_by(
-                Transaction.date.desc(),
-                Transaction.id.desc()
-            )
-            .offset(offset)
-            .limit(PAGE_SIZE)
-            .all()
-        )
-
-        total_count = db.query(Transaction).count()
+        all_operations = operation_rows(db)
+        transactions = all_operations[offset:offset + PAGE_SIZE]
+        total_count = len(all_operations)
 
         if not transactions and offset == 0:
             await update.message.reply_text(
@@ -2918,7 +2914,7 @@ async def director_operations_history(
 
         for t in transactions:
             type_emoji = "💰" if t.type == "income" else "💸"
-            type_name = "Доход" if t.type == "income" else "Расход"
+            type_name = "Доход" if t.type == "income" else ("Трата сотрудника" if t.is_employee_expense else "Расход")
             date_text = (
                 t.date.strftime("%d.%m.%Y")
                 if t.date
@@ -3282,8 +3278,53 @@ def find_employee_in_text(
 
 async def handle_director_text(
     update: Update,
-    text: str
+    text: str,
+    context: ContextTypes.DEFAULT_TYPE,
 ):
+
+    pending_income = context.user_data.get("director_income")
+    if pending_income:
+        if text.strip().lower() in ("отмена", "❌ отмена"):
+            context.user_data.pop("director_income", None)
+            await update.message.reply_text("Добавление дохода отменено.", reply_markup=director_keyboard())
+            return
+        if not pending_income.get("income_source"):
+            source = {"инвестиции": "investment", "показы": "show"}.get(text.strip().lower())
+            if not source:
+                await update.message.reply_text("Выберите источник: Инвестиции или Показы.")
+                return
+            pending_income["income_source"] = source
+            await update.message.reply_text(
+                "На какой счёт поступил доход?",
+                reply_markup=ReplyKeyboardMarkup([["Наличные", "Расчётный счёт"], ["❌ Отмена"]], resize_keyboard=True),
+            )
+            return
+        account = {"наличные": "cash", "банк": "cash", "расчётный счёт": "bank_account", "расчетный счет": "bank_account"}.get(text.strip().lower())
+        if not account:
+            await update.message.reply_text("Выберите счёт: Наличные или Расчётный счёт.")
+            return
+        db = get_db()
+        try:
+            db.add(Transaction(
+                type="income", category="Доход", amount=pending_income["amount"],
+                description=pending_income["description"], date=date.today(),
+                income_source=pending_income["income_source"], account=account,
+            ))
+            db.commit()
+        except Exception as error:
+            db.rollback()
+            print("Ошибка записи дохода:", error)
+            await update.message.reply_text("❌ Не удалось записать доход. Повторите выбор счёта.")
+            return
+        finally:
+            db.close()
+        context.user_data.pop("director_income", None)
+        await update.message.reply_text(
+            f"✅ Доход записан: {pending_income['amount']:,.2f} ₽\n"
+            f"Источник: {'Инвестиции' if pending_income['income_source'] == 'investment' else 'Показы'}\n"
+            f"Счёт: {ACCOUNT_LABELS[account]}", reply_markup=director_keyboard(),
+        )
+        return
 
     lower = text.lower().strip()
 
@@ -3465,8 +3506,8 @@ async def handle_director_text(
                 f"{purpose}\n\n"
                 "🧾 После покупки сотрудник "
                 "должен отправить чек.\n\n"
-                "Операция расхода будет создана "
-                "после получения чека.",
+                "Деньги списаны со счёта при выдаче. "
+                "Чек учитывается как трата сотрудника без повторного списания.",
                 reply_markup=director_keyboard()
             )
 
@@ -3517,49 +3558,10 @@ async def handle_director_text(
 
             return
 
-        db = get_db()
-
-        try:
-
-            transaction = Transaction(
-                type="income",
-                category="Доход",
-                amount=amount,
-                description=text,
-                date=date.today()
-            )
-
-            db.add(
-                transaction
-            )
-
-            db.commit()
-
-        except Exception as error:
-
-            db.rollback()
-
-            print(
-                "Ошибка записи дохода:",
-                error
-            )
-
-            await update.message.reply_text(
-                "❌ Не удалось записать доход."
-            )
-
-            return
-
-        finally:
-
-            db.close()
-
+        context.user_data["director_income"] = {"amount": amount, "description": text}
         await update.message.reply_text(
-            "✅ Доход записан\n\n"
-            f"💰 Сумма: "
-            f"{amount:,.2f} ₽\n"
-            f"📝 {text}",
-            reply_markup=director_keyboard()
+            "Выберите источник дохода:",
+            reply_markup=ReplyKeyboardMarkup([["Инвестиции", "Показы"], ["❌ Отмена"]], resize_keyboard=True),
         )
 
         return
@@ -3607,7 +3609,8 @@ async def handle_director_text(
                 category=category,
                 amount=amount,
                 description=text,
-                date=date.today()
+                date=date.today(),
+                account="bank_account" if "расчетн" in normalized else "cash",
             )
 
             db.add(
@@ -4294,7 +4297,8 @@ async def handle_text(
 
         await handle_director_text(
             update,
-            text
+            text,
+            context,
         )
 
 
@@ -4360,12 +4364,17 @@ def record_employee_expense_now(
     """
     amount = float(amount)
 
+    transfer = db.query(MoneyTransfer).filter(MoneyTransfer.id == transfer_id).first() if transfer_id else None
+
     transaction = Transaction(
         type="expense",
         category=category,
         amount=amount,
         description=description,
         date=date.today(),
+        account=transfer.account if transfer else None,
+        employee_id=user.id,
+        paid_to=user.full_name,
     )
     db.add(transaction)
     db.flush()
@@ -4798,21 +4807,10 @@ async def summary(
             .all()
         )
 
-        income = sum(
-            float(t.amount)
-            for t in transactions
-            if t.type == "income"
-        )
-
-        expense = sum(
-            float(t.amount)
-            for t in transactions
-            if t.type == "expense"
-        )
-
-        balance = (
-            income - expense
-        )
+        statistics = get_statistics(db)
+        income = statistics["income"]
+        expense = statistics["expense"]
+        balance = statistics["balance"]
 
     except Exception as error:
 

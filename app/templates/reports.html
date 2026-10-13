@@ -1224,6 +1224,31 @@
 </div>
 
 
+<div class="panel">
+    <div class="panel-header">
+        <div>
+            <h2>Выдачи и траты сотрудников за период</h2>
+            <p class="panel-description">Траты из выданных денег не списываются со счёта повторно.</p>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Сотрудник</th><th>Выдано</th><th>Потрачено</th></tr></thead>
+            <tbody>
+                {% for employee in report.employee_totals %}
+                <tr>
+                    <td>{{ employee.name }}</td>
+                    <td>{{ "%.2f"|format(employee.issued) }} ₽</td>
+                    <td>{{ "%.2f"|format(employee.spent) }} ₽</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3">За выбранный период выдач и трат сотрудников нет.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <!-- =========================================================
      ВСЕ ОПЕРАЦИИ
 ========================================================= -->
@@ -1394,8 +1419,7 @@
 
                     <td>
 
-                        {% if transaction.type == "expense"
-                              and transaction.category == "Заработная плата" %}
+                        {% if transaction.type == "expense" %}
 
                             {{ transaction.paid_to or "—" }}
 

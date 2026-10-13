@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from . import models
+from .statistics import get_statistics
 
 
 
@@ -31,7 +32,10 @@ def get_financial_forecast(db: Session):
 
 
 
-    current_balance = income - expense
+    statistics = get_statistics(db)
+    income = statistics["income"]
+    expense = statistics["expense"]
+    current_balance = statistics["balance"]
 
 
 

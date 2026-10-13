@@ -19,6 +19,7 @@ from reportlab.platypus import (
 
 def get_font_path():
     possible_paths = [
+        Path(__file__).resolve().parent / "static" / "fonts" / "DejaVuSans.ttf",
         Path("C:/Windows/Fonts/arial.ttf"),
         Path("C:/Windows/Fonts/ARIAL.TTF"),
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),

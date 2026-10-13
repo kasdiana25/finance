@@ -103,7 +103,7 @@
                             </span>
                         {% else %}
                             <span class="badge expense-badge">
-                                Расход
+                                {{ "Трата сотрудника" if transaction.is_employee_expense else "Расход" }}
                             </span>
                         {% endif %}
                     </td>

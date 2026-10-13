@@ -50,6 +50,7 @@ from .recurring_service import generate_recurring_transactions
 from .forecast import get_financial_forecast
 from .notification_service import generate_notifications
 from .report_service import get_financial_report
+from .accounting import operation_rows
 
 
 # =========================================================
@@ -1300,17 +1301,9 @@ def reports_page(
 
 
 def register_pdf_fonts():
-    regular = Path(
-        os.path.expandvars(
-            r"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        )
-    )
-
-    bold = Path(
-        os.path.expandvars(
-            r"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        )
-    )
+    fonts_dir = BASE_DIR / "static" / "fonts"
+    regular = fonts_dir / "DejaVuSans.ttf"
+    bold = fonts_dir / "DejaVuSans-Bold.ttf"
 
     if not regular.exists():
         raise FileNotFoundError(
@@ -1525,7 +1518,7 @@ def reports_pdf(
                 ""
             )
 
-            if category != "Заработная плата":
+            if category == "Выдача сотруднику":
                 paid_to = get_value(
                     transaction,
                     "paid_to",
@@ -1989,30 +1982,25 @@ def reports_pdf(
     total_spent_without_salary = 0
 
     # ---------------------------------------------------------
-    # Здесь считаем:
-    # "Выдано" = сумма операций этому получателю
-    # "Потрачено без ЗП" = сумма обычных расходов.
-    #
-    # Если у получателя нет отдельного поля "выдано/потрачено",
-    # обе суммы будут одинаковыми, потому что текущая модель
-    # хранит саму операцию расхода.
+    # Выдачи и траты сотрудников считаются независимо за период.
     # ---------------------------------------------------------
-    for person, amount in sorted(
-        issued_by_person.items(),
-        key=lambda x: x[0].lower()
+    for employee in sorted(
+        report.get("employee_totals", []),
+        key=lambda row: row["name"].lower()
     ):
-        amount = num(amount)
+        amount = num(employee["issued"])
+        spent = num(employee["spent"])
 
         total_issued += amount
-        total_spent_without_salary += amount
+        total_spent_without_salary += spent
 
         issued_table.append([
-            P(person),
+            P(employee["name"]),
             P(money(amount), False, True),
-            P(money(amount), False, True),
+            P(money(spent), False, True),
         ])
 
-    if not issued_by_person:
+    if not report.get("employee_totals"):
         issued_table.append([
             P("Нет данных"),
             P(money(0), False, True),
@@ -2264,7 +2252,7 @@ def home(
         request=request,
         name="index.html",
         context={
-            "transactions": transactions[:10],
+            "transactions": operation_rows(db, transactions)[:10],
             "employee_names": {
                 employee.id: employee.full_name
                 for employee in db.query(models.TelegramUser).all()
@@ -2292,7 +2280,7 @@ def transactions_page(
         request=request,
         name="transactions.html",
         context={
-            "transactions": transactions,
+            "transactions": operation_rows(db, transactions),
             "employee_names": {
                 employee.id: employee.full_name
                 for employee in db.query(models.TelegramUser).all()

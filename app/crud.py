@@ -52,7 +52,7 @@ def create_transaction(
 
     db_transaction = models.Transaction(
         type=transaction.type,
-        category=transaction.category,
+        category=transaction.category or "Доход",
         amount=transaction.amount,
         description=transaction.description,
         date=transaction.date,
@@ -99,7 +99,7 @@ def update_transaction(
             )
 
     db_transaction.type = transaction.type
-    db_transaction.category = transaction.category
+    db_transaction.category = transaction.category or "Доход"
     db_transaction.amount = transaction.amount
     db_transaction.description = transaction.description
     db_transaction.date = transaction.date
@@ -774,48 +774,21 @@ def get_receipt(
 
 def get_report_statistics(db: Session):
 
-    from sqlalchemy import func
+    from collections import defaultdict
+    from .accounting import operation_rows
+    from .statistics import get_statistics
 
-    total_income = db.query(
-        func.coalesce(
-            func.sum(models.Transaction.amount),
-            0
-        )
-    ).filter(
-        models.Transaction.type == "income"
-    ).scalar()
-
-    total_expense = db.query(
-        func.coalesce(
-            func.sum(models.Transaction.amount),
-            0
-        )
-    ).filter(
-        models.Transaction.type == "expense"
-    ).scalar()
-
-    balance = total_income - total_expense
-
-    expenses_by_category = db.query(
-        models.Transaction.category,
-        func.sum(models.Transaction.amount)
-    ).filter(
-        models.Transaction.type == "expense"
-    ).group_by(
-        models.Transaction.category
-    ).order_by(
-        func.sum(models.Transaction.amount).desc()
-    ).all()
-
+    statistics = get_statistics(db)
+    categories = defaultdict(float)
+    for operation in operation_rows(db):
+        if operation.type == "expense" and not operation.is_employee_expense:
+            categories[operation.category or "Без категории"] += float(operation.amount)
     return {
-        "total_income": total_income,
-        "total_expense": total_expense,
-        "balance": balance,
+        "total_income": statistics["income"],
+        "total_expense": statistics["expense"],
+        "balance": statistics["balance"],
         "expenses_by_category": [
-            {
-                "category": category,
-                "amount": amount
-            }
-            for category, amount in expenses_by_category
-        ]
+            {"category": category, "amount": amount}
+            for category, amount in sorted(categories.items(), key=lambda item: item[1], reverse=True)
+        ],
     }

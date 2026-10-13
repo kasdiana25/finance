@@ -3,6 +3,8 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from . import models
+from .accounting import operation_rows, employee_period_totals
+from .statistics import INITIAL_BANK_BALANCE
 
 
 # =========================================================
@@ -176,11 +178,7 @@ def get_financial_report(
     # ОПЕРАЦИИ
     # =====================================================
 
-    transactions = (
-        db.query(
-            models.Transaction
-        ).all()
-    )
+    transactions = operation_rows(db)
 
 
     period_transactions = []
@@ -324,7 +322,7 @@ def get_financial_report(
         # РАСХОД
         # =================================================
 
-        elif transaction.type == "expense":
+        elif transaction.type == "expense" and not transaction.is_employee_expense:
 
             expense += amount
 
@@ -442,7 +440,7 @@ def get_financial_report(
 
     account_balances = {
 
-        "cash": 0.0,
+        "cash": INITIAL_BANK_BALANCE,
 
         "bank_account": 0.0
 
@@ -473,7 +471,7 @@ def get_financial_report(
             ] += amount
 
 
-        elif transaction.type == "expense":
+        elif transaction.type == "expense" and not transaction.is_employee_expense:
 
             account_balances[
                 account
@@ -496,6 +494,8 @@ def get_financial_report(
 
 
     for transfer in transfers:
+        if transfer.status == "cancelled":
+            continue
 
         transfer_date = _as_date(
             transfer.created_at
@@ -663,6 +663,7 @@ def get_financial_report(
     # =========================================================
 
     return {
+        "employee_totals": employee_period_totals(db, start_date, end_date),
 
         "period":
             period,

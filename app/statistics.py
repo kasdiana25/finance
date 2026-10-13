@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from .models import Transaction, MoneyTransfer
+from .accounting import employee_expense_ids
 
 
 # =========================================================
@@ -12,6 +13,7 @@ INITIAL_BANK_BALANCE = 16600.0
 
 
 def get_statistics(db: Session):
+    employee_spending = employee_expense_ids(db)
 
     # =====================================================
     # ОБЩИЕ ДОХОДЫ
@@ -31,7 +33,8 @@ def get_statistics(db: Session):
     expense = db.query(
         func.sum(Transaction.amount)
     ).filter(
-        Transaction.type == "expense"
+        Transaction.type == "expense",
+        ~Transaction.id.in_(employee_spending)
     ).scalar() or 0
 
 
@@ -68,6 +71,7 @@ def get_statistics(db: Session):
         func.sum(Transaction.amount)
     ).filter(
         Transaction.type == "expense",
+        ~Transaction.id.in_(employee_spending),
         Transaction.account == "cash"
     ).scalar() or 0
 
@@ -80,6 +84,7 @@ def get_statistics(db: Session):
         func.sum(Transaction.amount)
     ).filter(
         Transaction.type == "expense",
+        ~Transaction.id.in_(employee_spending),
         Transaction.account == "bank_account"
     ).scalar() or 0
 
